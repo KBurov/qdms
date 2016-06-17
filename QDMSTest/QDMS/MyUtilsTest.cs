@@ -54,10 +54,11 @@ namespace QDMSTest
         }
 
         [Test]
-        [ExpectedException]
         public void GetFuturesContractSymbolThrowsExceptionWhenMonthOutOfRange()
         {
-            MyUtils.GetFuturesContractSymbol("GC", 0, 2012);
+            Assert.That(
+                () => MyUtils.GetFuturesContractSymbol("GC", 0, 2012),
+                Throws.TypeOf<ArgumentOutOfRangeException>());
         }
 
         [Test]
@@ -108,10 +109,11 @@ namespace QDMSTest
         }
 
         [Test]
-        [ExpectedException]
         public void BusinessDaysBetweenThrowsExceptionWhenEndDateBeforeStartDate()
         {
-            MyUtils.BusinessDaysBetween(new DateTime(2000, 1, 1), new DateTime(1999, 1, 1), new UnitedStates());
+            Assert.That(
+                () => MyUtils.BusinessDaysBetween(new DateTime(2000, 1, 1), new DateTime(1999, 1, 1), new UnitedStates()),
+                Throws.TypeOf<Exception>());
         }
     }
 }

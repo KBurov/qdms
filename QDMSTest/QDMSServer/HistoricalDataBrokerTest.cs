@@ -413,7 +413,6 @@ namespace QDMSTest
         }
 
         [Test]
-        [ExpectedException]
         public void ThrowsExceptionWhenMakingRequestForInstrumentWithDataSourceThatDoesNotExist()
         {
             _instrument.Datasource.Name = "ASDfasdf___________________aasdf";
@@ -421,11 +420,13 @@ namespace QDMSTest
                  dataLocation: DataLocation.Both,
                  saveToLocalStorage: false,
                  rthOnly: true);
-            _broker.RequestHistoricalData(request);
+
+            Assert.That(
+                () => _broker.RequestHistoricalData(request),
+                Throws.TypeOf<Exception>());
         }
 
         [Test]
-        [ExpectedException]
         public void ThrowsExceptionWhenMakingRequestForInstrumentWithDataSourceThatDoesNotExistAndForcingFreshData()
         {
             _instrument.Datasource.Name = "ASDfasdf___________________aasdf";
@@ -433,11 +434,13 @@ namespace QDMSTest
                  dataLocation: DataLocation.ExternalOnly,
                  saveToLocalStorage: false,
                  rthOnly: true);
-            _broker.RequestHistoricalData(request);
+
+            Assert.That(
+                () => _broker.RequestHistoricalData(request),
+                Throws.TypeOf<Exception>());
         }
 
         [Test]
-        [ExpectedException]
         public void ThrowsExceptionWhenMakingRequestForInstrumentWithDataSourceThatIsDisconnected()
         {
             var request = new HistoricalDataRequest(_instrument, BarSize.OneDay, new DateTime(2012, 1, 1), new DateTime(2013, 1, 1),
@@ -447,7 +450,9 @@ namespace QDMSTest
 
             _dataSourceMock.SetupGet(x => x.Connected).Returns(false);
 
-            _broker.RequestHistoricalData(request);
+            Assert.That(
+                () => _broker.RequestHistoricalData(request),
+                Throws.TypeOf<Exception>());
         }
     }
 }

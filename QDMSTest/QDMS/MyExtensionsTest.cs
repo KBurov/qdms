@@ -34,11 +34,13 @@ namespace QDMSTest
         }
 
         [Test]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void IndexOfCorrectlyThrowsNullException()
         {
             var list = new List<double>();
-            list.IndexOf(null);
+
+            Assert.That(
+                () => list.IndexOf(null),
+                Throws.TypeOf<ArgumentNullException>());
         }
 
         [Test]
@@ -59,11 +61,13 @@ namespace QDMSTest
         }
 
         [Test]
-        [ExpectedException]
         public void MostFrequentThrowsExceptionWhenCalledOnEmptyList()
         {
             var emptyList = new List<int>();
-            emptyList.MostFrequent();
+
+            Assert.That(
+                () => emptyList.MostFrequent(),
+                Throws.TypeOf<Exception>());
         }
 
         [Test]
