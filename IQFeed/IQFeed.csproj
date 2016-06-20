@@ -41,7 +41,18 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DataStructures.cs" />
+    <Compile Include="IQAdminSocketClient.cs" />
+    <Compile Include="IQConnect.cs" />
+    <Compile Include="IQCredentials.cs" />
+    <Compile Include="IQLevel1Client.cs" />
+    <Compile Include="IQLevel2Client.cs" />
+    <Compile Include="IQLookupHistorySymbolClient.cs" />
+    <Compile Include="IQLookupTableClient.cs" />
+    <Compile Include="IQSocket.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SocketClient.cs" />
+    <Compile Include="Util.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
