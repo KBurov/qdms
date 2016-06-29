@@ -1,3 +1,7 @@
+# QDMS
+
+[![Last build at https://ci.appveyor.com/project/KBurov/qdms](https://ci.appveyor.com/api/projects/status/github/KBurov/qdms?branch=master&svg=true)](https://ci.appveyor.com/project/KBurov/qdms)
+
 Note:
 This is a fork of the QDMS from QUSMA. In general, my plan was not to make my own fork. I would gladly see my changes in the origin fork. But the fact that QUSMA seems to be dead forced me to make my own fork.
 
