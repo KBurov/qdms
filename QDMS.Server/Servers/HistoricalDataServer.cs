@@ -28,6 +28,7 @@ using NLog;
 using ProtoBuf;
 
 using QDMS;
+
 // ReSharper disable once CheckNamespace
 namespace QDMSServer
 {
@@ -262,16 +263,15 @@ namespace QDMSServer
                 var request = Serializer.Deserialize<HistoricalDataRequest>(ms);
 
                 _logger.Info(
-                    string.Format(
-                        "Historical Data Request from client {0}: {7} {1} @ {2} from {3} to {4} Location: {5} {6:;;SaveToLocal}",
-                        requesterIdentity,
-                        request.Instrument.Symbol,
-                        Enum.GetName(typeof(BarSize), request.Frequency),
-                        request.StartingDate,
-                        request.EndingDate,
-                        request.DataLocation,
-                        request.SaveDataToStorage ? 0 : 1,
-                        request.Instrument.Datasource.Name));
+                    "Historical Data Request from client {0}: {7} {1} @ {2} from {3} to {4} Location: {5} {6:;;SaveToLocal}",
+                    requesterIdentity,
+                    request.Instrument.Symbol,
+                    Enum.GetName(typeof(BarSize), request.Frequency),
+                    request.StartingDate,
+                    request.EndingDate,
+                    request.DataLocation,
+                    request.SaveDataToStorage ? 0 : 1,
+                    request.Instrument.Datasource.Name);
 
                 request.RequesterIdentity = requesterIdentity;
 
