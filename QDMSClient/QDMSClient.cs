@@ -30,6 +30,63 @@ namespace QDMSClient
 {
     public class QDMSClient : IDataClient
     {
+        // Where to connect
+        private readonly string _host;
+        private readonly int _realTimeRequestPort;
+        private readonly int _realTimePublishPort;
+        private readonly int _instrumentServerPort;
+        private readonly int _historicalDataPort;
+        /// <summary>
+        /// This holds the zeromq identity string that we'll be using.
+        /// </summary>
+        private readonly string _name;
+        /// <summary>
+        /// Queue of historical data requests waiting to be sent out.
+        /// </summary>
+        private readonly ConcurrentQueue<HistoricalDataRequest> _historicalDataRequests;
+
+        private readonly object _reqSocketLock = new object();
+        private readonly object _dealerSocketLock = new object();
+        private readonly object _pendingHistoricalRequestsLock = new object();
+        private readonly object _realTimeDataStreamsLock = new object();
+
+        private NetMQContext _context;
+        /// <summary>
+        /// This socket sends requests for real time data.
+        /// </summary>
+        private DealerSocket _reqSocket;
+        /// <summary>
+        /// This socket receives real time data.
+        /// </summary>
+        private SubscriberSocket _subSocket;
+        /// <summary>
+        /// This socket sends requests for and receives historical data.
+        /// </summary>
+        private NetMQSocket _dealerSocket;
+        /// <summary>
+        /// Periodically sends heartbeat messages to server to ensure the connection is up.
+        /// </summary>
+        private Timer _heartBeatTimer;
+        /// <summary>
+        /// The time when the last heartbeat was received. If it's too long ago we're disconnected.
+        /// </summary>
+        private DateTime _lastHeartBeat;
+        /// <summary>
+        /// This thread run the DealerLoop() method.
+        /// It sends out requests for historical data, and receives data when requests are fulfilled.
+        /// </summary>
+        private Thread _dealerLoopThread;
+        /// <summary>
+        /// This int is used to give each historical request a unique RequestID.
+        /// Keep in mind this is unique to the CLIENT. AssignedID is unique to the server.
+        /// </summary>
+        private int _requestCount;
+        /// <summary>
+        /// Used to start and stop the various threads that keep the client running.
+        /// </summary>
+        private bool _running;
+        private Poller _poller;
+
         /// <summary>
         /// Returns true if the connection to the server is up.
         /// </summary>
@@ -44,76 +101,6 @@ namespace QDMSClient
         /// Keeps track of live real time data streams.
         /// </summary>
         public ObservableCollection<RealTimeDataRequest> RealTimeDataStreams { get; set; }
-
-        private NetMQContext _context;
-
-        /// <summary>
-        /// This socket sends requests for real time data.
-        /// </summary>
-        private DealerSocket _reqSocket;
-
-        /// <summary>
-        /// This socket receives real time data.
-        /// </summary>
-        private SubscriberSocket _subSocket;
-
-        /// <summary>
-        /// This socket sends requests for and receives historical data.
-        /// </summary>
-        private NetMQSocket _dealerSocket;
-
-        /// <summary>
-        /// Periodically sends heartbeat messages to server to ensure the connection is up.
-        /// </summary>
-        private Timer _heartBeatTimer;
-
-        /// <summary>
-        /// The time when the last heartbeat was received. If it's too long ago we're disconnected.
-        /// </summary>
-        private DateTime _lastHeartBeat;
-
-        /// <summary>
-        /// This thread run the DealerLoop() method.
-        /// It sends out requests for historical data, and receives data when requests are fulfilled.
-        /// </summary>
-        private Thread _dealerLoopThread;
-
-
-        //Where to connect
-        private readonly string _host;
-
-        private readonly int _realTimeRequestPort;
-        private readonly int _realTimePublishPort;
-        private readonly int _instrumentServerPort;
-        private readonly int _historicalDataPort;
-
-        /// <summary>
-        /// This holds the zeromq identity string that we'll be using.
-        /// </summary>
-        private readonly string _name;
-
-        /// <summary>
-        /// Queue of historical data requests waiting to be sent out.
-        /// </summary>
-        private readonly ConcurrentQueue<HistoricalDataRequest> _historicalDataRequests;
-
-        /// <summary>
-        /// This int is used to give each historical request a unique RequestID.
-        /// Keep in mind this is unique to the CLIENT. AssignedID is unique to the server.
-        /// </summary>
-        private int _requestCount;
-
-        private readonly object _reqSocketLock = new object();
-        private readonly object _dealerSocketLock = new object();
-        private readonly object _pendingHistoricalRequestsLock = new object();
-        private readonly object _realTimeDataStreamsLock = new object();
-
-        /// <summary>
-        /// Used to start and stop the various threads that keep the client running.
-        /// </summary>
-        private bool _running;
-
-        private Poller _poller;
 
         public void Dispose()
         {
