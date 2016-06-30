@@ -28,7 +28,7 @@ using NLog;
 using ProtoBuf;
 
 using QDMS;
-
+// ReSharper disable once CheckNamespace
 namespace QDMSServer
 {
     public class HistoricalDataServer : IDisposable
@@ -70,9 +70,8 @@ namespace QDMSServer
             }
 
             _listenPort = port;
-
             _broker = broker;
-            _broker.HistoricalDataArrived += broker_HistoricalDataArrived;
+            _broker.HistoricalDataArrived += BrokerHistoricalDataArrived;
         }
 
         /// <summary>
@@ -87,7 +86,7 @@ namespace QDMSServer
             }
 
             _routerSocket = new RouterSocket($"tcp://*:{_listenPort}");
-            _routerSocket.ReceiveReady += socket_ReceiveReady;
+            _routerSocket.ReceiveReady += SocketReceiveReady;
 
             _poller = new NetMQPoller {_routerSocket};
             _poller.RunAsync();
@@ -110,7 +109,7 @@ namespace QDMSServer
         }
 
         #region Event handlers
-        private void broker_HistoricalDataArrived(object sender, HistoricalDataEventArgs e)
+        private void BrokerHistoricalDataArrived(object sender, HistoricalDataEventArgs e)
         {
             if (_disposed) {
                 return;
@@ -129,7 +128,7 @@ namespace QDMSServer
         /// <summary>
         ///     This is called when a new historical data request or data push request is made.
         /// </summary>
-        private void socket_ReceiveReady(object sender, NetMQSocketEventArgs e)
+        private void SocketReceiveReady(object sender, NetMQSocketEventArgs e)
         {
             if (_disposed) {
                 return;
@@ -137,20 +136,20 @@ namespace QDMSServer
 
             try {
                 _socketFree.Wait();
-                //Here we process the first two message parts: first, the identity string of the client
+                // Here we process the first two message parts: first, the identity string of the client
                 var requesterIdentity = e.Socket.ReceiveFrameString();
-
-                //second: the string specifying the type of request
+                // Second: the string specifying the type of request
                 var text = e.Socket.ReceiveFrameString();
-                if (text == "HISTREQ") //the client wants to request some data
+
+                if (text.Equals("HISTREQ", StringComparison.InvariantCultureIgnoreCase)) // The client wants to request some data
                 {
                     AcceptHistoricalDataRequest(requesterIdentity, e.Socket);
                 }
-                else if (text == "HISTPUSH") //the client wants to push some data into the db
+                else if (text.Equals("HISTPUSH", StringComparison.InvariantCultureIgnoreCase)) // The client wants to push some data into the db
                 {
                     AcceptDataAdditionRequest(requesterIdentity, e.Socket);
                 }
-                else if (text == "AVAILABLEDATAREQ") //client wants to know what kind of data we have stored locally
+                else if (text.Equals("AVAILABLEDATAREQ", StringComparison.InvariantCultureIgnoreCase)) // Client wants to know what kind of data we have stored locally
                 {
                     AcceptAvailableDataRequest(requesterIdentity, e.Socket);
                 }
@@ -171,23 +170,22 @@ namespace QDMSServer
         private void SendFilledHistoricalRequest(HistoricalDataRequest request, List<OHLCBar> data)
         {
             using (var ms = new MemoryStream()) {
-                //this is a 5 part message
-                //1st message part: the identity string of the client that we're routing the data to
+                // This is a 5 part message
+                // 1st message part: the identity string of the client that we're routing the data to
                 var clientIdentity = request.RequesterIdentity;
+
                 _routerSocket.SendMoreFrame(clientIdentity ?? string.Empty);
-
-                //2nd message part: the type of reply we're sending
+                // 2nd message part: the type of reply we're sending
                 _routerSocket.SendMoreFrame("HISTREQREP");
-
-                //3rd message part: the HistoricalDataRequest object that was used to make the request
+                // 3rd message part: the HistoricalDataRequest object that was used to make the request
                 _routerSocket.SendMoreFrame(MyUtils.ProtoBufSerialize(request, ms));
-
-                //4th message part: the size of the uncompressed, serialized data. Necessary for decompression on the client end.
+                // 4th message part: the size of the uncompressed, serialized data. Necessary for decompression on the client end.
                 var uncompressed = MyUtils.ProtoBufSerialize(data, ms);
-                _routerSocket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
 
-                //5th message part: the compressed serialized data.
-                var compressed = LZ4Codec.EncodeHC(uncompressed, 0, uncompressed.Length); //compress
+                _routerSocket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
+                // 5th message part: the compressed serialized data.
+                var compressed = LZ4Codec.EncodeHC(uncompressed, 0, uncompressed.Length); // compress
+
                 _routerSocket.SendFrame(compressed);
             }
         }
@@ -198,15 +196,13 @@ namespace QDMSServer
         private void AcceptAvailableDataRequest(string requesterIdentity, NetMQSocket socket)
         {
             using (var ms = new MemoryStream()) {
-                //get the instrument
+                // Get the instrument
                 bool hasMore;
                 var buffer = socket.ReceiveFrameBytes(out hasMore);
                 var instrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
 
-                //log the request
                 _logger.Info($"Received local data storage info request for {instrument.Symbol}.");
-
-                //and send the reply
+                // And send the reply
                 var storageInfo = _broker.GetAvailableDataInfo(instrument);
 
                 socket.SendMoreFrame(requesterIdentity);
@@ -227,28 +223,26 @@ namespace QDMSServer
         /// </summary>
         private void AcceptDataAdditionRequest(string requesterIdentity, NetMQSocket socket)
         {
-            //final message part: receive the DataAdditionRequest object
-            bool hasMore;
-            var ms = new MemoryStream();
-            var buffer = socket.ReceiveFrameBytes(out hasMore);
+            using (var ms = new MemoryStream()) {
+                // Final message part: receive the DataAdditionRequest object
+                bool hasMore;
+                var buffer = socket.ReceiveFrameBytes(out hasMore);
+                var request = MyUtils.ProtoBufDeserialize<DataAdditionRequest>(buffer, ms);
 
-            var request = MyUtils.ProtoBufDeserialize<DataAdditionRequest>(buffer, ms);
+                _logger.Info($"Received data push request for {request.Instrument.Symbol}.");
+                // Start building the reply
+                socket.SendMoreFrame(requesterIdentity);
+                socket.SendMoreFrame("PUSHREP");
 
-            //log the request
-            _logger.Info($"Received data push request for {request.Instrument.Symbol}.");
+                try {
+                    _broker.AddData(request);
 
-            //start building the reply
-            socket.SendMoreFrame(requesterIdentity);
-            socket.SendMoreFrame("PUSHREP");
-
-            try {
-                _broker.AddData(request);
-
-                socket.SendFrame("OK");
-            }
-            catch (Exception ex) {
-                socket.SendMoreFrame("ERROR");
-                socket.SendFrame(ex.Message);
+                    socket.SendFrame("OK");
+                }
+                catch (Exception ex) {
+                    socket.SendMoreFrame("ERROR");
+                    socket.SendFrame(ex.Message);
+                }
             }
         }
 
@@ -257,36 +251,37 @@ namespace QDMSServer
         /// </summary>
         private void AcceptHistoricalDataRequest(string requesterIdentity, NetMQSocket socket)
         {
-            //third: a serialized HistoricalDataRequest object which contains the details of the request
+            // Third: a serialized HistoricalDataRequest object which contains the details of the request
             bool hasMore;
             var buffer = socket.ReceiveFrameBytes(out hasMore);
 
-            var ms = new MemoryStream();
-            ms.Write(buffer, 0, buffer.Length);
-            ms.Position = 0;
-            var request = Serializer.Deserialize<HistoricalDataRequest>(ms);
+            using (var ms = new MemoryStream()) {
+                ms.Write(buffer, 0, buffer.Length);
+                ms.Position = 0;
 
-            //log the request
-            _logger.Info(
-                string.Format(
-                    "Historical Data Request from client {0}: {7} {1} @ {2} from {3} to {4} Location: {5} {6:;;SaveToLocal}",
-                    requesterIdentity,
-                    request.Instrument.Symbol,
-                    Enum.GetName(typeof(BarSize), request.Frequency),
-                    request.StartingDate,
-                    request.EndingDate,
-                    request.DataLocation,
-                    request.SaveDataToStorage ? 0 : 1,
-                    request.Instrument.Datasource.Name));
+                var request = Serializer.Deserialize<HistoricalDataRequest>(ms);
 
-            request.RequesterIdentity = requesterIdentity;
+                _logger.Info(
+                    string.Format(
+                        "Historical Data Request from client {0}: {7} {1} @ {2} from {3} to {4} Location: {5} {6:;;SaveToLocal}",
+                        requesterIdentity,
+                        request.Instrument.Symbol,
+                        Enum.GetName(typeof(BarSize), request.Frequency),
+                        request.StartingDate,
+                        request.EndingDate,
+                        request.DataLocation,
+                        request.SaveDataToStorage ? 0 : 1,
+                        request.Instrument.Datasource.Name));
 
-            try {
-                _broker.RequestHistoricalData(request);
-            }
-            catch (Exception ex) {
-                //there's some sort of problem with fulfilling the request. Inform the client.
-                SendErrorReply(requesterIdentity, request.RequestID, ex.Message);
+                request.RequesterIdentity = requesterIdentity;
+
+                try {
+                    _broker.RequestHistoricalData(request);
+                }
+                catch (Exception ex) {
+                    // There's some sort of problem with fulfilling the request. Inform the client.
+                    SendErrorReply(requesterIdentity, request.RequestID, ex.Message);
+                }
             }
         }
 
@@ -296,17 +291,14 @@ namespace QDMSServer
         /// </summary>
         private void SendErrorReply(string requesterIdentity, int requestId, string message)
         {
-            //this is a 4 part message
-            //1st message part: the identity string of the client that we're routing the data to
+            // This is a 4 part message
+            // 1st message part: the identity string of the client that we're routing the data to
             _routerSocket.SendMoreFrame(requesterIdentity);
-
-            //2nd message part: the type of reply we're sending
+            // 2nd message part: the type of reply we're sending
             _routerSocket.SendMoreFrame("ERROR");
-
-            //3rd message part: the request ID
+            // 3rd message part: the request ID
             _routerSocket.SendMoreFrame(BitConverter.GetBytes(requestId));
-
-            //4th message part: the error
+            // 4th message part: the error
             _routerSocket.SendFrame(message);
         }
 
