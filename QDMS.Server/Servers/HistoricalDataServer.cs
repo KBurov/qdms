@@ -16,6 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 using LZ4;
 
@@ -35,7 +36,7 @@ namespace QDMSServer
         private readonly Logger _logger = LogManager.GetCurrentClassLogger();
         private readonly int _listenPort;
         private readonly IHistoricalDataBroker _broker;
-        private readonly object _socketLock = new object();
+        private readonly ManualResetEventSlim _socketFree = new ManualResetEventSlim(true);
 
         private NetMQSocket _routerSocket;
         private NetMQPoller _poller;
@@ -115,8 +116,13 @@ namespace QDMSServer
                 return;
             }
 
-            lock (_socketLock) {
+            try {
+                _socketFree.Wait();
+
                 SendFilledHistoricalRequest(e.Request, e.Data);
+            }
+            finally {
+                _socketFree.Set();
             }
         }
 
@@ -129,7 +135,8 @@ namespace QDMSServer
                 return;
             }
 
-            lock (_socketLock) {
+            try {
+                _socketFree.Wait();
                 //Here we process the first two message parts: first, the identity string of the client
                 var requesterIdentity = e.Socket.ReceiveFrameString();
 
@@ -150,6 +157,9 @@ namespace QDMSServer
                 else {
                     _logger.Info($"Unrecognized request to historical data broker: {text}");
                 }
+            }
+            finally {
+                _socketFree.Set();
             }
         }
         #endregion
@@ -208,6 +218,7 @@ namespace QDMSServer
                     socket.SendMoreFrame(MyUtils.ProtoBufSerialize(sdi, ms));
                 }
             }
+
             socket.SendFrame("END");
         }
 
@@ -232,6 +243,7 @@ namespace QDMSServer
 
             try {
                 _broker.AddData(request);
+
                 socket.SendFrame("OK");
             }
             catch (Exception ex) {
