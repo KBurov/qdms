@@ -12,8 +12,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Timers;
 
 using LZ4;
 
@@ -23,8 +21,6 @@ using NetMQ.Sockets;
 using ProtoBuf;
 
 using QDMS;
-
-using Timer = System.Timers.Timer;
 
 namespace QDMSClient
 {
@@ -46,8 +42,8 @@ namespace QDMSClient
         /// Queue of historical data requests waiting to be sent out.
         /// </summary>
         private readonly ConcurrentQueue<HistoricalDataRequest> _historicalDataRequests;
-
         private readonly object _reqSocketLock = new object();
+        private readonly object _subSocketLock = new object();
         private readonly object _dealerSocketLock = new object();
         private readonly object _pendingHistoricalRequestsLock = new object();
         private readonly object _realTimeDataStreamsLock = new object();
@@ -63,11 +59,15 @@ namespace QDMSClient
         /// <summary>
         /// This socket sends requests for and receives historical data.
         /// </summary>
-        private NetMQSocket _dealerSocket;
+        private DealerSocket _dealerSocket;
+        /// <summary>
+        /// Pooler class to manage all used sockets.
+        /// </summary>
+        private NetMQPoller _poller;
         /// <summary>
         /// Periodically sends heartbeat messages to server to ensure the connection is up.
         /// </summary>
-        private Timer _heartBeatTimer;
+        private NetMQTimer _heartBeatTimer;
         /// <summary>
         /// The time when the last heartbeat was received. If it's too long ago we're disconnected.
         /// </summary>
@@ -86,7 +86,6 @@ namespace QDMSClient
         /// Used to start and stop the various threads that keep the client running.
         /// </summary>
         private bool _running;
-        private Poller _poller;
         private bool _disposed;
         #endregion
 
@@ -94,6 +93,8 @@ namespace QDMSClient
         /// Returns true if the connection to the server is up.
         /// </summary>
         public bool Connected => (DateTime.Now - _lastHeartBeat).TotalSeconds < 5;
+
+        public bool ClientConnected => (_poller != null) && _poller.IsRunning && ((DateTime.Now - _lastHeartBeat).TotalSeconds < 5);
 
         /// <summary>
         /// Keeps track of historical requests that have been sent but the data has not been received yet.
@@ -118,6 +119,7 @@ namespace QDMSClient
             _subSocket?.Dispose();
             _dealerSocket?.Dispose();
             _heartBeatTimer?.Dispose();
+            _poller?.Dispose();
 
             _disposed = true;
         }
@@ -160,9 +162,10 @@ namespace QDMSClient
         {
             CheckDisposed();
 
-            using (var ms = new MemoryStream()) {
-                lock (_dealerSocketLock) {
-                    _dealerSocket.SendMoreFrame("AVAILABLEDATAREQ");
+            lock (_dealerSocketLock) {
+                _dealerSocket.SendMoreFrame("AVAILABLEDATAREQ");
+
+                using (var ms = new MemoryStream()) {
                     _dealerSocket.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
                 }
             }
@@ -175,7 +178,6 @@ namespace QDMSClient
         public int RequestHistoricalData(HistoricalDataRequest request)
         {
             CheckDisposed();
-
             // Make sure the request is valid
             if (request.EndingDate < request.StartingDate) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Historical Data Request Failed: Starting date must be after ending date."));
@@ -256,42 +258,56 @@ namespace QDMSClient
         {
             CheckDisposed();
 
-            Dispose();
-
-            _reqSocket = new DealerSocket($"tcp://{_host}:{_realTimeRequestPort}");
-            _reqSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
-            _reqSocket.ReceiveReady += ReqSocketReceiveReady;
-
-            _subSocket = new SubscriberSocket($"tcp://{_host}:{_realTimePublishPort}");
-            _subSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
-            _subSocket.ReceiveReady += SubSocketReceiveReady;
-
-            _dealerSocket = new DealerSocket($"tcp://{_host}:{_historicalDataPort}");
-            _dealerSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
-            _dealerSocket.ReceiveReady += DealerSocketReceiveReady;
-
-            // Start off by sending a ping to make sure everything is regular
-            var reply = string.Empty;
-
-            try {
-                _reqSocket.SendMoreFrame(string.Empty);
-                _reqSocket.SendFrame("PING");
-
-                _reqSocket.ReceiveString(TimeSpan.FromSeconds(1)); // Empty frame starts the REP message //todo receive string?
-                reply = _reqSocket.ReceiveString(TimeSpan.FromMilliseconds(50));
-            }
-            catch {
-                Dispose();
-            }
-
-            if (!reply.Equals("PONG", StringComparison.InvariantCultureIgnoreCase)) // Server didn't reply or replied incorrectly
-            {
-                _reqSocket.Disconnect($"tcp://{_host}:{_realTimeRequestPort}");
-                _reqSocket.Close();
-
-                RaiseEvent(Error, this, new ErrorArgs(-1, "Could not connect to server."));
-
+            if (ClientConnected) {
                 return;
+            }
+
+            lock (_reqSocketLock) {
+                _reqSocket = new DealerSocket($"tcp://{_host}:{_realTimeRequestPort}");
+                _reqSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
+                // Start off by sending a ping to make sure everything is regular
+                var reply = string.Empty;
+
+                try {
+                    _reqSocket.SendMoreFrame(string.Empty).SendFrame("PING");
+
+                    reply = _reqSocket.ReceiveFrameString(); // Empty frame starts the REP message //todo receive string?
+
+                    if (reply != null) {
+                        reply = _reqSocket.ReceiveFrameString();
+                    }
+                }
+                catch {
+                    Disconnect();
+                }
+
+                if (reply != null && !reply.Equals("PONG", StringComparison.InvariantCultureIgnoreCase)) {
+                    try {
+                        _reqSocket.Disconnect($"tcp://{_host}:{_realTimeRequestPort}");
+                    }
+                    finally {
+                        _reqSocket.Close();
+                        _reqSocket = null;
+                    }
+
+                    RaiseEvent(Error, this, new ErrorArgs(-1, "Could not connect to server."));
+
+                    return;
+                }
+
+                _reqSocket.ReceiveReady += ReqSocketReceiveReady;
+            }
+
+            lock (_subSocketLock) {
+                _subSocket = new SubscriberSocket($"tcp://{_host}:{_realTimePublishPort}");
+                _subSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
+                _subSocket.ReceiveReady += SubSocketReceiveReady;
+            }
+
+            lock (_dealerSocketLock) {
+                _dealerSocket = new DealerSocket($"tcp://{_host}:{_historicalDataPort}");
+                _dealerSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
+                _dealerSocket.ReceiveReady += DealerSocketReceiveReady;
             }
 
             _lastHeartBeat = DateTime.Now;
@@ -299,17 +315,14 @@ namespace QDMSClient
             // This loop sends out historical data requests and receives the data
             _dealerLoopThread = new Thread(DealerLoop) {Name = "Client Dealer Loop"};
             _dealerLoopThread.Start();
-            // This loop takes care of replies to the request socket: heartbeats and data request status messages
-            _poller = new Poller();
-            _poller.AddSocket(_reqSocket);
-            _poller.AddSocket(_subSocket);
-            _poller.AddSocket(_dealerSocket);
 
-            Task.Factory.StartNew(_poller.PollTillCancelled, TaskCreationOptions.LongRunning);
-
-            _heartBeatTimer = new Timer(1000);
+            _heartBeatTimer = new NetMQTimer(TimeSpan.FromSeconds(1));
             _heartBeatTimer.Elapsed += TimerElapsed;
-            _heartBeatTimer.Start();
+
+            // This loop takes care of replies to the request socket: heartbeats and data request status messages
+            _poller = new NetMQPoller {_reqSocket, _subSocket, _dealerSocket, _heartBeatTimer};
+
+            _poller.RunAsync();
         }
 
         /// <summary>
@@ -318,7 +331,6 @@ namespace QDMSClient
         public void Disconnect(bool cancelStreams = true)
         {
             CheckDisposed();
-
             // Start by canceling all active real time streams
             if (cancelStreams) {
                 while (RealTimeDataStreams.Count > 0) {
@@ -328,8 +340,8 @@ namespace QDMSClient
 
             _running = false;
 
-            if (_poller != null && _poller.IsStarted) {
-                _poller.CancelAndJoin();
+            if (_poller != null && _poller.IsRunning) {
+                _poller.Stop();
             }
 
             _heartBeatTimer?.Stop();
@@ -546,9 +558,12 @@ namespace QDMSClient
         }
 
         // The timer sends heartbeat messages so we know that the server is still up.
-        private void TimerElapsed(object sender, ElapsedEventArgs e)
+        private void TimerElapsed(object sender, NetMQTimerEventArgs e)
         {
-            HeartBeat();
+            lock (_reqSocketLock) {
+                _reqSocket.SendMoreFrame(string.Empty);
+                _reqSocket.SendFrame("PING");
+            }
         }
 
         /// <summary>
@@ -787,15 +802,6 @@ namespace QDMSClient
             }
 
             RaiseEvent(HistoricalDataReceived, this, new HistoricalDataEventArgs(request, data));
-        }
-
-        // Heartbeat makes sure the server is still up
-        private void HeartBeat()
-        {
-            lock (_reqSocketLock) {
-                _reqSocket.SendMoreFrame("");
-                _reqSocket.SendFrame("PING");
-            }
         }
 
         /// <summary>
