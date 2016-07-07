@@ -36,9 +36,9 @@ namespace QDMSServer
         private readonly Logger _logger = LogManager.GetCurrentClassLogger();
         private readonly string _connectionString;
         private readonly IHistoricalDataBroker _broker;
-        private readonly object _routerSocketLock = new object();
+        private readonly object _socketLock = new object();
 
-        private NetMQSocket _routerSocket;
+        private NetMQSocket _socket;
         private NetMQPoller _poller;
         private bool _disposed;
 
@@ -55,10 +55,6 @@ namespace QDMSServer
             }
 
             StopServer();
-
-            lock (_routerSocketLock) {
-                _routerSocket?.Dispose();
-            }
 
             _poller?.Dispose();
 
@@ -88,12 +84,12 @@ namespace QDMSServer
                 return;
             }
 
-            lock (_routerSocketLock) {
-                _routerSocket = new RouterSocket(_connectionString);
-                _routerSocket.ReceiveReady += SocketReceiveReady;
+            lock (_socketLock) {
+                _socket = new RouterSocket(_connectionString);
+                _socket.ReceiveReady += SocketReceiveReady;
             }
 
-            _poller = new NetMQPoller {_routerSocket};
+            _poller = new NetMQPoller {_socket};
             _poller.RunAsync();
         }
 
@@ -108,20 +104,21 @@ namespace QDMSServer
                 return;
             }
 
-            lock (_routerSocketLock) {
-                if (_routerSocket != null) {
+            _poller?.Stop();
+
+            lock (_socketLock) {
+                if (_socket != null) {
                     try {
-                        _routerSocket.Disconnect(_connectionString);
+                        _socket.Disconnect(_connectionString);
                     }
                     finally {
-                        _routerSocket.ReceiveReady -= SocketReceiveReady;
-                        _routerSocket.Close();
-                        _routerSocket = null;
+                        _socket.ReceiveReady -= SocketReceiveReady;
+                        _socket.Close();
+                        _socket = null;
                     }
                 }
             }
 
-            _poller?.Stop();
             _poller = null;
         }
 
@@ -147,11 +144,11 @@ namespace QDMSServer
             string requesterIdentity;
             string text;
 
-            lock (_routerSocketLock) {
+            lock (_socketLock) {
                 // Here we process the first two message parts: first, the identity string of the client
-                requesterIdentity = _routerSocket?.ReceiveFrameString() ?? string.Empty;
+                requesterIdentity = _socket?.ReceiveFrameString() ?? string.Empty;
                 // Second: the string specifying the type of request
-                text = _routerSocket?.ReceiveFrameString() ?? string.Empty;
+                text = _socket?.ReceiveFrameString() ?? string.Empty;
             }
 
             if (text.Equals("HISTREQ", StringComparison.InvariantCultureIgnoreCase)) // The client wants to request some data
@@ -178,26 +175,26 @@ namespace QDMSServer
         /// </summary>
         private void SendFilledHistoricalRequest(HistoricalDataRequest request, List<OHLCBar> data)
         {
-            lock (_routerSocketLock) {
-                if (_routerSocket != null) {
+            lock (_socketLock) {
+                if (_socket != null) {
                     using (var ms = new MemoryStream()) {
                         // This is a 5 part message
                         // 1st message part: the identity string of the client that we're routing the data to
                         var clientIdentity = request.RequesterIdentity;
 
-                        _routerSocket.SendMoreFrame(clientIdentity ?? string.Empty);
+                        _socket.SendMoreFrame(clientIdentity ?? string.Empty);
                         // 2nd message part: the type of reply we're sending
-                        _routerSocket.SendMoreFrame("HISTREQREP");
+                        _socket.SendMoreFrame("HISTREQREP");
                         // 3rd message part: the HistoricalDataRequest object that was used to make the request
-                        _routerSocket.SendMoreFrame(MyUtils.ProtoBufSerialize(request, ms));
+                        _socket.SendMoreFrame(MyUtils.ProtoBufSerialize(request, ms));
                         // 4th message part: the size of the uncompressed, serialized data. Necessary for decompression on the client end.
                         var uncompressed = MyUtils.ProtoBufSerialize(data, ms);
 
-                        _routerSocket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
+                        _socket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
                         // 5th message part: the compressed serialized data.
                         var compressed = LZ4Codec.EncodeHC(uncompressed, 0, uncompressed.Length); // compress
 
-                        _routerSocket.SendFrame(compressed);
+                        _socket.SendFrame(compressed);
                     }
                 }
             }
@@ -208,28 +205,28 @@ namespace QDMSServer
         /// </summary>
         private void AcceptAvailableDataRequest(string requesterIdentity)
         {
-            lock (_routerSocketLock) {
-                if (_routerSocket != null) {
+            lock (_socketLock) {
+                if (_socket != null) {
                     using (var ms = new MemoryStream()) {
                         // Get the instrument
                         bool hasMore;
-                        var buffer = _routerSocket.ReceiveFrameBytes(out hasMore);
+                        var buffer = _socket.ReceiveFrameBytes(out hasMore);
                         var instrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
 
                         _logger.Info($"Received local data storage info request for {instrument.Symbol}.");
                         // And send the reply
                         var storageInfo = _broker.GetAvailableDataInfo(instrument);
 
-                        _routerSocket.SendMoreFrame(requesterIdentity);
-                        _routerSocket.SendMoreFrame("AVAILABLEDATAREP");
-                        _routerSocket.SendMoreFrame(MyUtils.ProtoBufSerialize(instrument, ms));
-                        _routerSocket.SendMoreFrame(BitConverter.GetBytes(storageInfo.Count));
+                        _socket.SendMoreFrame(requesterIdentity);
+                        _socket.SendMoreFrame("AVAILABLEDATAREP");
+                        _socket.SendMoreFrame(MyUtils.ProtoBufSerialize(instrument, ms));
+                        _socket.SendMoreFrame(BitConverter.GetBytes(storageInfo.Count));
 
                         foreach (var sdi in storageInfo) {
-                            _routerSocket.SendMoreFrame(MyUtils.ProtoBufSerialize(sdi, ms));
+                            _socket.SendMoreFrame(MyUtils.ProtoBufSerialize(sdi, ms));
                         }
 
-                        _routerSocket.SendFrame("END");
+                        _socket.SendFrame("END");
                     }
                 }
             }
@@ -240,27 +237,27 @@ namespace QDMSServer
         /// </summary>
         private void AcceptDataAdditionRequest(string requesterIdentity)
         {
-            lock (_routerSocketLock) {
-                if (_routerSocket != null) {
+            lock (_socketLock) {
+                if (_socket != null) {
                     using (var ms = new MemoryStream()) {
                         // Final message part: receive the DataAdditionRequest object
                         bool hasMore;
-                        var buffer = _routerSocket.ReceiveFrameBytes(out hasMore);
+                        var buffer = _socket.ReceiveFrameBytes(out hasMore);
                         var request = MyUtils.ProtoBufDeserialize<DataAdditionRequest>(buffer, ms);
 
                         _logger.Info($"Received data push request for {request.Instrument.Symbol}.");
                         // Start building the reply
-                        _routerSocket.SendMoreFrame(requesterIdentity);
-                        _routerSocket.SendMoreFrame("PUSHREP");
+                        _socket.SendMoreFrame(requesterIdentity);
+                        _socket.SendMoreFrame("PUSHREP");
 
                         try {
                             _broker.AddData(request);
 
-                            _routerSocket.SendFrame("OK");
+                            _socket.SendFrame("OK");
                         }
                         catch (Exception ex) {
-                            _routerSocket.SendMoreFrame("ERROR");
-                            _routerSocket.SendFrame(ex.Message);
+                            _socket.SendMoreFrame("ERROR");
+                            _socket.SendFrame(ex.Message);
                         }
                     }
                 }
@@ -272,11 +269,11 @@ namespace QDMSServer
         /// </summary>
         private void AcceptHistoricalDataRequest(string requesterIdentity)
         {
-            lock (_routerSocketLock) {
-                if (_routerSocket != null) {
+            lock (_socketLock) {
+                if (_socket != null) {
                     // Third: a serialized HistoricalDataRequest object which contains the details of the request
                     bool hasMore;
-                    var buffer = _routerSocket.ReceiveFrameBytes(out hasMore);
+                    var buffer = _socket.ReceiveFrameBytes(out hasMore);
 
                     using (var ms = new MemoryStream()) {
                         ms.Write(buffer, 0, buffer.Length);
@@ -315,17 +312,17 @@ namespace QDMSServer
         /// </summary>
         private void SendErrorReply(string requesterIdentity, int requestId, string message)
         {
-            lock (_routerSocketLock) {
-                if (_routerSocket != null) {
+            lock (_socketLock) {
+                if (_socket != null) {
                     // This is a 4 part message
                     // 1st message part: the identity string of the client that we're routing the data to
-                    _routerSocket.SendMoreFrame(requesterIdentity);
+                    _socket.SendMoreFrame(requesterIdentity);
                     // 2nd message part: the type of reply we're sending
-                    _routerSocket.SendMoreFrame("ERROR");
+                    _socket.SendMoreFrame("ERROR");
                     // 3rd message part: the request ID
-                    _routerSocket.SendMoreFrame(BitConverter.GetBytes(requestId));
+                    _socket.SendMoreFrame(BitConverter.GetBytes(requestId));
                     // 4th message part: the error
-                    _routerSocket.SendFrame(message);
+                    _socket.SendFrame(message);
                 }
             }
         }
