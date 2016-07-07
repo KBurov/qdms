@@ -16,28 +16,31 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using NLog;
-using ProtoBuf;
-using QDMS;
+
 using NetMQ;
-using Poller = NetMQ.Poller;
+
+using NLog;
+
+using ProtoBuf;
+
+using QDMS;
 
 namespace QDMSServer
 {
     public class RealTimeDataServer : IDisposable
     {
         /// <summary>
-        /// This property determines the port used to send out real time data on the publish socket.
+        ///     This property determines the port used to send out real time data on the publish socket.
         /// </summary>
-        public int PublisherPort { get; private set; }
+        public int PublisherPort { get; }
 
         /// <summary>
-        /// This property determines the port used to receive new requests.
+        ///     This property determines the port used to receive new requests.
         /// </summary>
-        public int RequestPort { get; private set; }
+        public int RequestPort { get; }
 
         /// <summary>
-        /// Is true if the server is running
+        ///     Is true if the server is running
         /// </summary>
         public bool ServerRunning { get; private set; }
 
@@ -46,7 +49,7 @@ namespace QDMSServer
         private NetMQContext _context;
         private NetMQSocket _pubSocket;
         private NetMQSocket _reqSocket;
-        
+
 
         private readonly Logger _logger = LogManager.GetCurrentClassLogger();
 
@@ -65,19 +68,17 @@ namespace QDMSServer
         }
 
         /// <summary>
-        /// When data arrives from an external data source to the broker, this event is fired.
+        ///     When data arrives from an external data source to the broker, this event is fired.
         /// </summary>
-        void _broker_RealTimeDataArrived(object sender, RealTimeDataEventArgs e)
+        private void _broker_RealTimeDataArrived(object sender, RealTimeDataEventArgs e)
         {
             if (_pubSocket == null) return;
 
-            using (var ms = new MemoryStream())
-            {
+            using (var ms = new MemoryStream()) {
                 Serializer.Serialize(ms, e);
                 //this lock is needed because this method will be called from 
                 //the thread of each DataSource in the broker
-                lock (_pubSocketLock) 
-                {
+                lock (_pubSocketLock) {
                     _pubSocket.SendMoreFrame(BitConverter.GetBytes(e.InstrumentID)); //start by sending the ticker before the data
                     _pubSocket.SendFrame(ms.ToArray()); //then send the serialized bar
                 }
@@ -87,26 +88,23 @@ namespace QDMSServer
         //tells the servers to stop running and waits for the threads to shut down.
         public void StopServer()
         {
-            if (_poller != null && _poller.IsStarted)
-            {
+            if (_poller != null && _poller.IsStarted) {
                 _poller.CancelAndJoin();
             }
 
             //clear the socket and context and say it's not running any more
-            if (_pubSocket != null)
-            {
+            if (_pubSocket != null) {
                 _pubSocket.Dispose();
             }
             ServerRunning = false;
         }
 
         /// <summary>
-        /// Starts the publishing and request servers.
+        ///     Starts the publishing and request servers.
         /// </summary>
         public void StartServer()
         {
-            if (!ServerRunning)
-            {
+            if (!ServerRunning) {
                 _context = NetMQContext.Create();
 
                 //the publisher socket
@@ -118,20 +116,19 @@ namespace QDMSServer
                 _reqSocket.Bind("tcp://*:" + RequestPort);
                 _reqSocket.ReceiveReady += _reqSocket_ReceiveReady;
 
-                _poller = new Poller(new[] { _reqSocket });
+                _poller = new Poller(_reqSocket);
                 Task.Factory.StartNew(_poller.PollTillCancelled, TaskCreationOptions.LongRunning);
             }
             ServerRunning = true;
         }
 
-        void _reqSocket_ReceiveReady(object sender, NetMQSocketEventArgs e)
+        private void _reqSocket_ReceiveReady(object sender, NetMQSocketEventArgs e)
         {
-            string requestType = _reqSocket.ReceiveFrameString();
+            var requestType = _reqSocket.ReceiveFrameString();
             if (requestType == null) return;
 
             //handle ping requests
-            if (requestType == "PING")
-            {
+            if (requestType == "PING") {
                 _reqSocket.SendFrame("PONG");
                 return;
             }
@@ -144,8 +141,7 @@ namespace QDMSServer
 
             //manage cancellation requests
             //two part message: first: "CANCEL". Second: the instrument
-            if (requestType == "CANCEL")
-            {
+            if (requestType == "CANCEL") {
                 HandleRTDataCancelRequest();
             }
         }
@@ -155,7 +151,7 @@ namespace QDMSServer
         private void HandleRTDataCancelRequest()
         {
             bool hasMore;
-            byte[] buffer = _reqSocket.ReceiveFrameBytes(out hasMore);
+            var buffer = _reqSocket.ReceiveFrameBytes(out hasMore);
 
             //receive the instrument
             var ms = new MemoryStream();
@@ -172,7 +168,7 @@ namespace QDMSServer
         }
 
         /// <summary>
-        /// Send an error reply to a real time data request.
+        ///     Send an error reply to a real time data request.
         /// </summary>
         /// <param name="message"></param>
         /// <param name="serializedRequest"></param>
@@ -186,24 +182,21 @@ namespace QDMSServer
         // Accept a real time data request
         private void HandleRTDataRequest()
         {
-            using (var ms = new MemoryStream())
-            {
+            using (var ms = new MemoryStream()) {
                 bool hasMore;
-                byte[] buffer = _reqSocket.ReceiveFrameBytes(out hasMore);
+                var buffer = _reqSocket.ReceiveFrameBytes(out hasMore);
 
                 var request = MyUtils.ProtoBufDeserialize<RealTimeDataRequest>(buffer, ms);
 
                 //make sure the ID and data sources are set
-                if (!request.Instrument.ID.HasValue)
-                {
+                if (!request.Instrument.ID.HasValue) {
                     SendErrorReply("Instrument had no ID set.", buffer);
 
                     Log(LogLevel.Error, "Instrument with no ID requested.");
                     return;
                 }
 
-                if (request.Instrument.Datasource == null)
-                {
+                if (request.Instrument.Datasource == null) {
                     SendErrorReply("Instrument had no data source set.", buffer);
 
                     Log(LogLevel.Error, "Instrument with no data source requested.");
@@ -214,34 +207,36 @@ namespace QDMSServer
                 //the same symbol and data source, but at different frequencies
 
                 //forward the request to the broker
-                try
-                {
-                    if (Broker.RequestRealTimeData(request))
-                    {
+                try {
+                    if (Broker.RequestRealTimeData(request)) {
                         //and report success back to the requesting client
                         _reqSocket.SendMoreFrame("SUCCESS");
                         //along with the request
                         _reqSocket.SendFrame(MyUtils.ProtoBufSerialize(request, ms));
                     }
-                    else
-                    {
+                    else {
                         throw new Exception("Unknown error.");
                     }
                 }
-                catch (Exception ex)
-                {
+                catch (Exception ex) {
                     //there was a problem with requesting the feed
                     SendErrorReply(ex.Message, buffer);
 
                     //log the error
-                    Log(LogLevel.Error, string.Format("RTDS: Error handling RTD request {0} @ {1} ({2}): {3}", 
-                        request.Instrument.Symbol, request.Instrument.Datasource, request.Frequency, ex.Message));
+                    Log(
+                        LogLevel.Error,
+                        string.Format(
+                            "RTDS: Error handling RTD request {0} @ {1} ({2}): {3}",
+                            request.Instrument.Symbol,
+                            request.Instrument.Datasource,
+                            request.Frequency,
+                            ex.Message));
                 }
             }
         }
 
         /// <summary>
-        /// Log stuff.
+        ///     Log stuff.
         /// </summary>
         private void Log(LogLevel level, string message)
         {
@@ -252,18 +247,15 @@ namespace QDMSServer
         {
             StopServer();
 
-            if (_pubSocket != null)
-            {
+            if (_pubSocket != null) {
                 _pubSocket.Dispose();
                 _pubSocket = null;
             }
-            if (_reqSocket != null)
-            {
+            if (_reqSocket != null) {
                 _reqSocket.Dispose();
                 _reqSocket = null;
             }
-            if (_context != null)
-            {
+            if (_context != null) {
                 _context.Dispose();
                 _context = null;
             }
