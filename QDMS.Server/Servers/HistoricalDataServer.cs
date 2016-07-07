@@ -43,7 +43,7 @@ namespace QDMSServer
         private bool _disposed;
 
         /// <summary>
-        ///     Whether the broker is running or not.
+        ///     Whether the server is running or not.
         /// </summary>
         public bool ServerRunning => _poller != null && _poller.IsRunning;
 
