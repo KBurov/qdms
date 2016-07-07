@@ -119,7 +119,7 @@ namespace QDMSServer
             var instruments = new List<Instrument>();
 
             using (var ms = new MemoryStream()) {
-                // if the request is for a search, receive the instrument w/ the search parameters and pass it to the searcher
+                // If the request is for a search, receive the instrument w/ the search parameters and pass it to the searcher
                 if (request == "SEARCH" && hasMore) {
                     var buffer = _socket.ReceiveFrameBytes();
                     var searchInstrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
@@ -133,7 +133,7 @@ namespace QDMSServer
                         _logger.Error($"Instruments Server: Instrument search error: {ex.Message}");
                     }
                 }
-                else if (request == "ALL") // if the request is for all the instruments, we don't need to receive anything else
+                else if (request == "ALL") // If the request is for all the instruments, we don't need to receive anything else
                 {
                     _logger.Info("Instruments Server: received request for list of all instruments.");
 
@@ -144,7 +144,7 @@ namespace QDMSServer
                         _logger.Error($"Instruments Server: Instrument search error: {ex.Message}");
                     }
                 }
-                else if (request == "ADD" && hasMore) // request to add instrument
+                else if (request == "ADD" && hasMore) // Request to add instrument
                 {
                     var buffer = _socket.ReceiveFrameBytes();
                     var instrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
@@ -168,19 +168,19 @@ namespace QDMSServer
 
                     return;
                 }
-                else // no request = loop again
+                else // No request = loop again
                 {
                     return;
                 }
 
-                var uncompressed = MyUtils.ProtoBufSerialize(instruments, ms); // serialize the list of instruments
+                var uncompressed = MyUtils.ProtoBufSerialize(instruments, ms); // Serialize the list of instruments
 
-                ms.Read(uncompressed, 0, (int) ms.Length); // get the uncompressed data
+                ms.Read(uncompressed, 0, (int) ms.Length); // Get the uncompressed data
 
-                var result = LZ4Codec.Encode(uncompressed, 0, (int) ms.Length); // compress it
-                // before we send the result we must send the length of the uncompressed array, because it's needed for decompression
+                var result = LZ4Codec.Encode(uncompressed, 0, (int) ms.Length); // Compress it
+                // Before we send the result we must send the length of the uncompressed array, because it's needed for decompression
                 _socket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
-                // then finally send the results
+                // Then finally send the results
                 _socket.SendFrame(result);
             }
         }
