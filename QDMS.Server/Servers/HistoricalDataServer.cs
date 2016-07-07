@@ -40,7 +40,6 @@ namespace QDMSServer
 
         private NetMQSocket _socket;
         private NetMQPoller _poller;
-        private bool _disposed;
 
         /// <summary>
         ///     Whether the server is running or not.
@@ -50,15 +49,7 @@ namespace QDMSServer
         #region IDisposable implementation
         public void Dispose()
         {
-            if (_disposed) {
-                return;
-            }
-
             StopServer();
-
-            _poller?.Dispose();
-
-            _disposed = true;
         }
         #endregion
 
@@ -78,8 +69,6 @@ namespace QDMSServer
         /// </summary>
         public void StartServer()
         {
-            CheckDisposed();
-
             if (ServerRunning) {
                 return;
             }
@@ -98,13 +87,12 @@ namespace QDMSServer
         /// </summary>
         public void StopServer()
         {
-            CheckDisposed();
-
             if (!ServerRunning) {
                 return;
             }
 
             _poller?.Stop();
+            _poller?.Dispose();
 
             lock (_socketLock) {
                 if (_socket != null) {
@@ -125,10 +113,6 @@ namespace QDMSServer
         #region Event handlers
         private void BrokerHistoricalDataArrived(object sender, HistoricalDataEventArgs e)
         {
-            if (_disposed) {
-                return;
-            }
-
             SendFilledHistoricalRequest(e.Request, e.Data);
         }
 
@@ -137,10 +121,6 @@ namespace QDMSServer
         /// </summary>
         private void SocketReceiveReady(object sender, NetMQSocketEventArgs e)
         {
-            if (_disposed) {
-                return;
-            }
-
             string requesterIdentity;
             string text;
 
@@ -324,13 +304,6 @@ namespace QDMSServer
                     // 4th message part: the error
                     _socket.SendFrame(message);
                 }
-            }
-        }
-
-        private void CheckDisposed()
-        {
-            if (_disposed) {
-                throw new ObjectDisposedException("HistoricalDataServer");
             }
         }
     }
