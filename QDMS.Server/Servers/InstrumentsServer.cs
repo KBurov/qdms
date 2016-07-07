@@ -85,6 +85,7 @@ namespace QDMSServer
             }
 
             _poller?.Stop();
+            _poller?.Dispose();
 
             lock (_socketLock) {
                 if (_socket != null) {
