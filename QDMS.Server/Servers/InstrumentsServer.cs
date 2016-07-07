@@ -97,11 +97,11 @@ namespace QDMSServer
                 return;
             }
 
+            _poller?.Stop();
+
             lock (_socketLock) {
                 if (_socket != null) {
                     try {
-                        _poller?.Remove(_socket);
-
                         _socket.Disconnect(_connectionString);
                     }
                     finally {
@@ -112,7 +112,7 @@ namespace QDMSServer
                 }
             }
 
-            _poller?.Stop();
+            _poller = null;
         }
 
         private void SocketReceiveReady(object sender, NetMQSocketEventArgs e)
