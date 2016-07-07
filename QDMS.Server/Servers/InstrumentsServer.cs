@@ -13,13 +13,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using System.Windows;
+
 using LZ4;
-using NetMQ.zmq;
-using NLog;
-using QDMS;
+
 using NetMQ;
-using Poller = NetMQ.Poller;
+
+using NLog;
+
+using QDMS;
 
 namespace QDMSServer
 {
@@ -28,25 +29,22 @@ namespace QDMSServer
         private NetMQContext _context;
         private NetMQSocket _socket;
         private readonly Logger _logger = LogManager.GetCurrentClassLogger();
-        private bool _runServer;
         private readonly int _socketPort;
         private readonly IInstrumentSource _instrumentManager;
         private Poller _poller;
 
-        public bool Running { get { return _runServer; } }
+        public bool Running { get; private set; }
 
         public void Dispose()
         {
             if (Running)
                 StopServer();
 
-            if (_socket != null)
-            {
+            if (_socket != null) {
                 _socket.Dispose();
                 _socket = null;
             }
-            if (_context != null)
-            {
+            if (_context != null) {
                 _context.Dispose();
                 _context = null;
             }
@@ -58,53 +56,56 @@ namespace QDMSServer
                 throw new ArgumentNullException("instrumentManager");
 
             _socketPort = port;
-            
+
             _instrumentManager = instrumentManager;
         }
 
         /// <summary>
-        /// Starts the server.
+        ///     Starts the server.
         /// </summary>
         public void StartServer()
         {
-            if (_runServer) return;
+            if (Running) return;
 
-            _runServer = true;
+            Running = true;
             _context = NetMQContext.Create();
 
             _socket = _context.CreateSocket(ZmqSocketType.Rep);
             _socket.Bind("tcp://*:" + _socketPort);
             _socket.ReceiveReady += _socket_ReceiveReady;
-            _poller = new Poller(new[] { _socket });
+            _poller = new Poller(_socket);
 
             Task.Factory.StartNew(_poller.PollTillCancelled, TaskCreationOptions.LongRunning);
         }
 
-        void _socket_ReceiveReady(object sender, NetMQSocketEventArgs e)
+        private void _socket_ReceiveReady(object sender, NetMQSocketEventArgs e)
         {
             var ms = new MemoryStream();
             List<Instrument> instruments;
             bool hasMore;
-            string request = _socket.ReceiveString(SendReceiveOptions.DontWait, out hasMore);
+            var request = _socket.ReceiveString(SendReceiveOptions.DontWait, out hasMore);
             if (request == null) return;
 
             //if the request is for a search, receive the instrument w/ the search parameters and pass it to the searcher
-            if (request == "SEARCH" && hasMore)
-            {
-                byte[] buffer = _socket.ReceiveFrameBytes();
+            if (request == "SEARCH" && hasMore) {
+                var buffer = _socket.ReceiveFrameBytes();
                 var searchInstrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
 
-                Log(LogLevel.Info, string.Format("Instruments Server: Received search request: {0}",
-                    searchInstrument));
+                Log(
+                    LogLevel.Info,
+                    string.Format(
+                        "Instruments Server: Received search request: {0}",
+                        searchInstrument));
 
-                try
-                {
+                try {
                     instruments = _instrumentManager.FindInstruments(null, searchInstrument);
                 }
-                catch (Exception ex)
-                {
-                    Log(LogLevel.Error, string.Format("Instruments Server: Instrument search error: {0}",
-                        ex.Message));
+                catch (Exception ex) {
+                    Log(
+                        LogLevel.Error,
+                        string.Format(
+                            "Instruments Server: Instrument search error: {0}",
+                            ex.Message));
                     instruments = new List<Instrument>();
                 }
             }
@@ -115,22 +116,26 @@ namespace QDMSServer
             }
             else if (request == "ADD" && hasMore) //request to add instrument
             {
-                byte[] buffer = _socket.ReceiveFrameBytes();
+                var buffer = _socket.ReceiveFrameBytes();
                 var instrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
 
-                Log(LogLevel.Info, string.Format("Instruments Server: Received instrument addition request. Instrument: {0}",
-                    instrument));
+                Log(
+                    LogLevel.Info,
+                    string.Format(
+                        "Instruments Server: Received instrument addition request. Instrument: {0}",
+                        instrument));
 
                 Instrument addedInstrument;
-                try
-                {
+                try {
                     addedInstrument = _instrumentManager.AddInstrument(instrument);
                 }
-                catch (Exception ex)
-                {
+                catch (Exception ex) {
                     addedInstrument = null;
-                    Log(LogLevel.Error, string.Format("Instruments Server: Instrument addition error: {0}",
-                        ex.Message));
+                    Log(
+                        LogLevel.Error,
+                        string.Format(
+                            "Instruments Server: Instrument addition error: {0}",
+                            ex.Message));
                 }
                 _socket.SendMoreFrame(addedInstrument != null ? "SUCCESS" : "FAILURE");
 
@@ -143,9 +148,9 @@ namespace QDMSServer
                 return;
             }
 
-            byte[] uncompressed = MyUtils.ProtoBufSerialize(instruments, ms);//serialize the list of instruments
-            ms.Read(uncompressed, 0, (int)ms.Length); //get the uncompressed data
-            byte[] result = LZ4Codec.Encode(uncompressed, 0, (int)ms.Length); //compress it
+            var uncompressed = MyUtils.ProtoBufSerialize(instruments, ms); //serialize the list of instruments
+            ms.Read(uncompressed, 0, (int) ms.Length); //get the uncompressed data
+            var result = LZ4Codec.Encode(uncompressed, 0, (int) ms.Length); //compress it
 
             //before we send the result we must send the length of the uncompressed array, because it's needed for decompression
             _socket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
@@ -155,19 +160,18 @@ namespace QDMSServer
         }
 
         /// <summary>
-        /// Stops the server from running.
+        ///     Stops the server from running.
         /// </summary>
         public void StopServer()
         {
-            _runServer = false;
-            if (_poller != null && _poller.IsStarted)
-            {
+            Running = false;
+            if (_poller != null && _poller.IsStarted) {
                 _poller.CancelAndJoin();
             }
         }
 
         /// <summary>
-        /// Add a log item.
+        ///     Add a log item.
         /// </summary>
         private void Log(LogLevel level, string message)
         {
