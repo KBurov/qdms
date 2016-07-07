@@ -86,7 +86,6 @@ namespace QDMSClient
         /// Used to start and stop the various threads that keep the client running.
         /// </summary>
         private bool _running;
-        private bool _disposed;
         #endregion
 
         /// <summary>
@@ -109,19 +108,7 @@ namespace QDMSClient
         #region IDisposable implementation
         public void Dispose()
         {
-            if (_disposed) {
-                return;
-            }
-
             Disconnect();
-
-            _reqSocket?.Dispose();
-            _subSocket?.Dispose();
-            _dealerSocket?.Dispose();
-            _heartBeatTimer?.Dispose();
-            _poller?.Dispose();
-
-            _disposed = true;
         }
         #endregion
 
@@ -139,8 +126,6 @@ namespace QDMSClient
         /// </summary>
         public void PushData(DataAdditionRequest request)
         {
-            CheckDisposed();
-
             if (request.Instrument?.ID == null) {
                 RaiseEvent(Error, null, new ErrorArgs(-1, "Instrument must be set and have an ID."));
 
@@ -160,8 +145,6 @@ namespace QDMSClient
         /// </summary>
         public void GetLocallyAvailableDataInfo(Instrument instrument)
         {
-            CheckDisposed();
-
             lock (_dealerSocketLock) {
                 _dealerSocket.SendMoreFrame("AVAILABLEDATAREQ");
 
@@ -177,7 +160,6 @@ namespace QDMSClient
         /// <returns>An ID uniquely identifying this historical data request. -1 if there was an error.</returns>
         public int RequestHistoricalData(HistoricalDataRequest request)
         {
-            CheckDisposed();
             // Make sure the request is valid
             if (request.EndingDate < request.StartingDate) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Historical Data Request Failed: Starting date must be after ending date."));
@@ -223,8 +205,6 @@ namespace QDMSClient
         /// <returns>An ID uniquely identifying this real time data request. -1 if there was an error.</returns>
         public int RequestRealTimeData(RealTimeDataRequest request)
         {
-            CheckDisposed();
-
             if (!Connected) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not request real time data - not connected."));
                 return -1;
@@ -256,8 +236,6 @@ namespace QDMSClient
         /// </summary>
         public void Connect()
         {
-            CheckDisposed();
-
             if (ClientConnected) {
                 return;
             }
@@ -330,7 +308,6 @@ namespace QDMSClient
         /// </summary>
         public void Disconnect(bool cancelStreams = true)
         {
-            CheckDisposed();
             // Start by canceling all active real time streams
             if (cancelStreams) {
                 while (RealTimeDataStreams.Count > 0) {
@@ -387,8 +364,6 @@ namespace QDMSClient
         /// <returns>A list of instruments matching these features.</returns>
         public List<Instrument> FindInstruments(Instrument instrument = null)
         {
-            CheckDisposed();
-
             if (!Connected) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not request instruments - not connected."));
 
@@ -449,8 +424,6 @@ namespace QDMSClient
         /// </summary>
         public void CancelRealTimeData(Instrument instrument)
         {
-            CheckDisposed();
-
             if (!Connected) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not cancel real time data - not connected."));
 
@@ -483,8 +456,6 @@ namespace QDMSClient
         /// <returns></returns>
         public List<Instrument> GetAllInstruments()
         {
-            CheckDisposed();
-
             return FindInstruments();
         }
         #endregion
@@ -520,8 +491,6 @@ namespace QDMSClient
         /// <returns>The instrument with its ID set if successful, null otherwise.</returns>
         public Instrument AddInstrument(Instrument instrument)
         {
-            CheckDisposed();
-
             if (!Connected) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not add instrument - not connected."));
                 return null;
@@ -817,13 +786,6 @@ namespace QDMSClient
             var handler = @event;
 
             handler?.Invoke(sender, e);
-        }
-
-        private void CheckDisposed()
-        {
-            if (_disposed) {
-                throw new ObjectDisposedException("QDMSClient");
-            }
         }
     }
 }
