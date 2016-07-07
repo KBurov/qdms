@@ -34,7 +34,6 @@ namespace QDMSServer
 
         private NetMQSocket _socket;
         private NetMQPoller _poller;
-        private bool _disposed;
 
         /// <summary>
         ///     Whether the server is running or not.
@@ -44,15 +43,7 @@ namespace QDMSServer
         #region IDisposable implementation
         public void Dispose()
         {
-            if (_disposed) {
-                return;
-            }
-
             StopServer();
-
-            _poller?.Dispose();
-
-            _disposed = true;
         }
         #endregion
 
@@ -71,8 +62,6 @@ namespace QDMSServer
         /// </summary>
         public void StartServer()
         {
-            CheckDisposed();
-
             if (ServerRunning) {
                 return;
             }
@@ -91,8 +80,6 @@ namespace QDMSServer
         /// </summary>
         public void StopServer()
         {
-            CheckDisposed();
-
             if (!ServerRunning) {
                 return;
             }
@@ -117,10 +104,6 @@ namespace QDMSServer
 
         private void SocketReceiveReady(object sender, NetMQSocketEventArgs e)
         {
-            if (_disposed) {
-                return;
-            }
-
             var hasMore = false;
             var request = string.Empty;
 
@@ -198,13 +181,6 @@ namespace QDMSServer
                 _socket.SendMoreFrame(BitConverter.GetBytes(uncompressed.Length));
                 // then finally send the results
                 _socket.SendFrame(result);
-            }
-        }
-
-        private void CheckDisposed()
-        {
-            if (_disposed) {
-                throw new ObjectDisposedException("HistoricalDataServer");
             }
         }
     }
