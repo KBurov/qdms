@@ -5,131 +5,95 @@
 // -----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+
 using QDMS;
 
 namespace SampleApp
 {
-    class Program
+    internal class Program
     {
-        static void Main()
+        private static void Main()
         {
             //create the client, assuming the default port settings
-            QDMSClient.QDMSClient client = new QDMSClient.QDMSClient(
-                "SampleClient",
-                "127.0.0.1",
-                5556,
-                5557,
-                5558,
-                5555);
+            using (var client = new QDMSClient.QDMSClient("SampleClient", "127.0.0.1", 5556, 5557, 5558, 5555)) {
+                //hook up the events needed to receive data & error messages
+                client.HistoricalDataReceived += client_HistoricalDataReceived;
+                client.RealTimeDataReceived += client_RealTimeDataReceived;
+                client.LocallyAvailableDataInfoReceived += client_LocallyAvailableDataInfoReceived;
+                client.Error += client_Error;
+                //connect to the server
+                client.Connect();
+                //make sure the connection was succesful before we continue
+                if (!client.Connected) {
+                    Console.WriteLine("Could not connect.");
+                    Console.WriteLine("Press enter to exit.");
+                    Console.ReadLine();
+                    return;
+                }
+                //request the list of available instruments
+                var instruments = client.FindInstruments();
 
-            //hook up the events needed to receive data & error messages
-            client.HistoricalDataReceived += client_HistoricalDataReceived;
-            client.RealTimeDataReceived += client_RealTimeDataReceived;
-            client.LocallyAvailableDataInfoReceived += client_LocallyAvailableDataInfoReceived;
-            client.Error += client_Error;
+                foreach (var i in instruments) {
+                    Console.WriteLine($"Instrument ID {i.ID}: {i.Symbol} ({i.Type}), Datasource: {i.Datasource.Name}");
+                }
 
-            //connect to the server
-            client.Connect();
-            
-            //make sure the connection was succesful before we continue
-            if (!client.Connected)
-            {
-                Console.WriteLine("Could not connect.");
+                Thread.Sleep(3000);
+                //then we grab some historical data from Yahoo
+                //start by finding the SPY instrument
+                var spy = instruments.FirstOrDefault(x => x.Symbol == "SPY" && x.Datasource.Name == "Yahoo");
+                if (spy != null) {
+                    var req = new HistoricalDataRequest(
+                        spy,
+                        BarSize.OneDay,
+                        new DateTime(2013, 1, 1),
+                        new DateTime(2013, 1, 15));
+
+                    client.RequestHistoricalData(req);
+
+                    Thread.Sleep(3000);
+                    //now that we downloaded the data, let's make a request to see what is stored locally
+                    client.GetLocallyAvailableDataInfo(spy);
+
+                    Thread.Sleep(3000);
+                    //finally send a real time data request (from the simulated data datasource)
+                    spy.Datasource.Name = "SIM";
+                    var rtReq = new RealTimeDataRequest(spy, BarSize.OneSecond);
+                    client.RequestRealTimeData(rtReq);
+
+                    Thread.Sleep(3000);
+                    //And then cancel the real time data stream
+                    client.CancelRealTimeData(spy);
+                }
+
                 Console.WriteLine("Press enter to exit.");
                 Console.ReadLine();
-                return;
             }
-
-            //request the list of available instruments
-            List<Instrument> instruments = client.FindInstruments();
-            foreach (Instrument i in instruments)
-            {
-                Console.WriteLine("Instrument ID {0}: {1} ({2}), Datasource: {3}",
-                    i.ID,
-                    i.Symbol,
-                    i.Type,
-                    i.Datasource.Name);
-            }
-
-            Thread.Sleep(3000);
-            
-            //then we grab some historical data from Yahoo
-            //start by finding the SPY instrument
-            var spy = instruments.FirstOrDefault(x => x.Symbol == "SPY" && x.Datasource.Name == "Yahoo");
-            if (spy != null)
-            {
-                var req = new HistoricalDataRequest(
-                    spy,
-                    BarSize.OneDay,
-                    new DateTime(2013, 1, 1),
-                    new DateTime(2013, 1, 15),
-                    dataLocation: DataLocation.Both,
-                    saveToLocalStorage: true,
-                    rthOnly: true);
-
-                client.RequestHistoricalData(req);
-
-
-                Thread.Sleep(3000);
-
-                //now that we downloaded the data, let's make a request to see what is stored locally
-                client.GetLocallyAvailableDataInfo(spy);
-
-                Thread.Sleep(3000);
-
-                //finally send a real time data request (from the simulated data datasource)
-                spy.Datasource.Name = "SIM";
-                var rtReq = new RealTimeDataRequest(spy, BarSize.OneSecond);
-                client.RequestRealTimeData(rtReq);
-
-                Thread.Sleep(3000);
-
-                //And then cancel the real time data stream
-                client.CancelRealTimeData(spy);
-            }
-
-            Console.WriteLine("Press enter to exit.");
-            Console.ReadLine();
-            client.Disconnect();
-            client.Dispose();
         }
 
-        static void client_LocallyAvailableDataInfoReceived(object sender, LocallyAvailableDataInfoReceivedEventArgs e)
+        private static void client_LocallyAvailableDataInfoReceived(object sender, LocallyAvailableDataInfoReceivedEventArgs e)
         {
-            foreach (StoredDataInfo s in e.StorageInfo)
-            {
-                Console.WriteLine("Freq: {0} - From {1} to {2}", s.Frequency, s.EarliestDate, s.LatestDate);
+            foreach (var s in e.StorageInfo) {
+                Console.WriteLine($"Freq: {s.Frequency} - From {s.EarliestDate} to {s.LatestDate}");
             }
         }
 
-        static void client_Error(object sender, ErrorArgs e)
+        private static void client_Error(object sender, ErrorArgs e)
         {
-            Console.WriteLine("Error {0}: {1}", e.ErrorCode, e.ErrorMessage);
+            Console.WriteLine($"Error {e.ErrorCode}: {e.ErrorMessage}");
         }
 
-        static void client_RealTimeDataReceived(object sender, RealTimeDataEventArgs e)
+        private static void client_RealTimeDataReceived(object sender, RealTimeDataEventArgs e)
         {
-            Console.WriteLine("Real Time Data Received: O: {0}  H: {1}  L: {2}  C: {3}",
-                e.Open,
-                e.High,
-                e.Low,
-                e.Close);
+            Console.WriteLine($"Real Time Data Received: O: {e.Open}  H: {e.High}  L: {e.Low}  C: {e.Close}");
         }
 
-        static void client_HistoricalDataReceived(object sender, HistoricalDataEventArgs e)
+        private static void client_HistoricalDataReceived(object sender, HistoricalDataEventArgs e)
         {
             Console.WriteLine("Historical data received:");
-            foreach (OHLCBar bar in e.Data)
-            {
-                Console.WriteLine("{0} - O: {1}  H: {2}  L: {3}  C: {4}",
-                    bar.DT,
-                    bar.Open,
-                    bar.High,
-                    bar.Low,
-                    bar.Close);
+            foreach (var bar in e.Data) {
+                Console.WriteLine($"{bar.DT} - O: {bar.Open}  H: {bar.High}  L: {bar.Low}  C: {bar.Close}");
             }
         }
     }

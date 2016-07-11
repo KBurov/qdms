@@ -205,6 +205,7 @@ namespace QDMS
         /// </summary>
         public static T ProtoBufDeserialize<T>(byte[] input, MemoryStream ms)
         {
+            // TODO: Think to move memory stream creation inside method
             ms.SetLength(0);
             ms.Write(input, 0, input.Length);
             ms.Position = 0;

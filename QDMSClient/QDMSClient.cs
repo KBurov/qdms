@@ -22,18 +22,21 @@ using ProtoBuf;
 
 using QDMS;
 
+// TODO: Fix comments at the end of lines
 namespace QDMSClient
 {
     // ReSharper disable once InconsistentNaming
     public class QDMSClient : IDataClient
     {
+        private const int HistoricalDataRequestsPeriodInSeconds = 10;
+        private const int HeartBeatPeriodInSeconds = 1;
+
         #region Variables
         // Where to connect
-        private readonly string _host;
-        private readonly int _realTimeRequestPort;
-        private readonly int _realTimePublishPort;
-        private readonly int _instrumentServerPort;
-        private readonly int _historicalDataPort;
+        private readonly string _realTimeRequestConnectionString;
+        private readonly string _realTimeDataConnectionString;
+        private readonly string _instrumentServerConnectionString;
+        private readonly string _historicalDataConnectionString;
         /// <summary>
         /// This holds the zeromq identity string that we'll be using.
         /// </summary>
@@ -42,28 +45,32 @@ namespace QDMSClient
         /// Queue of historical data requests waiting to be sent out.
         /// </summary>
         private readonly ConcurrentQueue<HistoricalDataRequest> _historicalDataRequests;
-        private readonly object _reqSocketLock = new object();
-        private readonly object _subSocketLock = new object();
-        private readonly object _dealerSocketLock = new object();
+        private readonly object _realTimeRequestSocketLock = new object();
+        private readonly object _realTimeDataSocketLock = new object();
+        private readonly object _historicalDataSocketLock = new object();
         private readonly object _pendingHistoricalRequestsLock = new object();
         private readonly object _realTimeDataStreamsLock = new object();
 
         /// <summary>
         /// This socket sends requests for real time data.
         /// </summary>
-        private DealerSocket _reqSocket;
+        private DealerSocket _realTimeRequestSocket;
         /// <summary>
         /// This socket receives real time data.
         /// </summary>
-        private SubscriberSocket _subSocket;
+        private SubscriberSocket _realTimeDataSocket;
         /// <summary>
         /// This socket sends requests for and receives historical data.
         /// </summary>
-        private DealerSocket _dealerSocket;
+        private DealerSocket _historicalDataSocket;
         /// <summary>
         /// Pooler class to manage all used sockets.
         /// </summary>
         private NetMQPoller _poller;
+        /// <summary>
+        /// Periodically sends out requests for historical data and receives data when requests are fulfilled.
+        /// </summary>
+        private NetMQTimer _historicalDataTimer;
         /// <summary>
         /// Periodically sends heartbeat messages to server to ensure the connection is up.
         /// </summary>
@@ -73,37 +80,25 @@ namespace QDMSClient
         /// </summary>
         private DateTime _lastHeartBeat;
         /// <summary>
-        /// This thread run the DealerLoop() method.
-        /// It sends out requests for historical data, and receives data when requests are fulfilled.
-        /// </summary>
-        private Thread _dealerLoopThread;
-        /// <summary>
         /// This int is used to give each historical request a unique RequestID.
         /// Keep in mind this is unique to the CLIENT. AssignedID is unique to the server.
         /// </summary>
         private int _requestCount;
-        /// <summary>
-        /// Used to start and stop the various threads that keep the client running.
-        /// </summary>
-        private bool _running;
         #endregion
 
-        /// <summary>
-        /// Returns true if the connection to the server is up.
-        /// </summary>
-        public bool Connected => (DateTime.Now - _lastHeartBeat).TotalSeconds < 5;
+        private bool PollerRunning => (_poller != null) && _poller.IsRunning;
 
-        public bool ClientConnected => (_poller != null) && _poller.IsRunning && ((DateTime.Now - _lastHeartBeat).TotalSeconds < 5);
+        public bool Connected => PollerRunning && ((DateTime.Now - _lastHeartBeat).TotalSeconds < 5);
 
         /// <summary>
         /// Keeps track of historical requests that have been sent but the data has not been received yet.
         /// </summary>
-        public ObservableCollection<HistoricalDataRequest> PendingHistoricalRequests { get; }
+        public ObservableCollection<HistoricalDataRequest> PendingHistoricalRequests { get; } = new ObservableCollection<HistoricalDataRequest>();
 
         /// <summary>
         /// Keeps track of live real time data streams.
         /// </summary>
-        public ObservableCollection<RealTimeDataRequest> RealTimeDataStreams { get; }
+        public ObservableCollection<RealTimeDataRequest> RealTimeDataStreams { get; } = new ObservableCollection<RealTimeDataRequest>();
 
         #region IDisposable implementation
         public void Dispose()
@@ -122,45 +117,79 @@ namespace QDMSClient
         public event EventHandler<ErrorArgs> Error;
 
         /// <summary>
-        /// Pushes data to local storage.
+        ///     Pushes data to local storage.
         /// </summary>
         public void PushData(DataAdditionRequest request)
         {
-            if (request.Instrument?.ID == null) {
-                RaiseEvent(Error, null, new ErrorArgs(-1, "Instrument must be set and have an ID."));
+            if (request == null) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Request cannot be null."));
 
                 return;
             }
 
-            using (var ms = new MemoryStream()) {
-                lock (_dealerSocketLock) {
-                    _dealerSocket.SendMoreFrame("HISTPUSH");
-                    _dealerSocket.SendFrame(MyUtils.ProtoBufSerialize(request, ms));
+            if (request.Instrument?.ID == null) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Instrument must be set and have an ID."));
+
+                return;
+            }
+
+            if (!Connected) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Could not push historical data to local storage - not connected."));
+
+                return;
+            }
+
+            lock (_historicalDataSocketLock) {
+                if (_historicalDataSocket != null) {
+                    _historicalDataSocket.SendMoreFrame("HISTPUSH");
+
+                    using (var ms = new MemoryStream()) {
+                        _historicalDataSocket.SendFrame(MyUtils.ProtoBufSerialize(request, ms));
+                    }
                 }
             }
         }
 
         /// <summary>
-        /// Requests information on what historical data is available in local storage for this instrument.
+        ///     Requests information on what historical data is available in local storage for this instrument.
         /// </summary>
         public void GetLocallyAvailableDataInfo(Instrument instrument)
         {
-            lock (_dealerSocketLock) {
-                _dealerSocket.SendMoreFrame("AVAILABLEDATAREQ");
+            if (instrument == null) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Instrument cannot be null."));
 
-                using (var ms = new MemoryStream()) {
-                    _dealerSocket.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
+                return;
+            }
+
+            if (!Connected) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Could not request local historical data - not connected."));
+
+                return;
+            }
+
+            lock (_historicalDataSocketLock) {
+                if (_historicalDataSocket != null) {
+                    _historicalDataSocket.SendMoreFrame("AVAILABLEDATAREQ");
+
+                    using (var ms = new MemoryStream()) {
+                        _historicalDataSocket.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
+                    }
                 }
             }
         }
 
         /// <summary>
-        /// Request historical data. Data will be delivered through the HistoricalDataReceived event.
+        ///     Request historical data. Data will be delivered through the HistoricalDataReceived event.
         /// </summary>
         /// <returns>An ID uniquely identifying this historical data request. -1 if there was an error.</returns>
         public int RequestHistoricalData(HistoricalDataRequest request)
         {
-            // Make sure the request is valid
+            if (request == null) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Historical Data Request Failed: Request cannot be null."));
+
+                return -1;
+            }
+
             if (request.EndingDate < request.StartingDate) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Historical Data Request Failed: Starting date must be after ending date."));
 
@@ -168,7 +197,7 @@ namespace QDMSClient
             }
 
             if (request.Instrument == null) {
-                RaiseEvent(Error, this, new ErrorArgs(-1, "Historical Data Request Failed: null Instrument."));
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Historical Data Request Failed: Instrument cannot be null."));
 
                 return -1;
             }
@@ -188,7 +217,7 @@ namespace QDMSClient
                         "Warning: Requesting low-frequency data outside RTH should be done with DataLocation = ExternalOnly, data from local storage will be incorrect."));
             }
 
-            request.RequestID = _requestCount++;
+            request.RequestID = Interlocked.Increment(ref _requestCount);
 
             lock (_pendingHistoricalRequestsLock) {
                 PendingHistoricalRequests.Add(request);
@@ -200,31 +229,42 @@ namespace QDMSClient
         }
 
         /// <summary>
-        /// Request a new real time data stream. Data will be delivered through the RealTimeDataReceived event.
+        ///     Request a new real time data stream. Data will be delivered through the RealTimeDataReceived event.
         /// </summary>
         /// <returns>An ID uniquely identifying this real time data request. -1 if there was an error.</returns>
         public int RequestRealTimeData(RealTimeDataRequest request)
         {
-            if (!Connected) {
-                RaiseEvent(Error, this, new ErrorArgs(-1, "Could not request real time data - not connected."));
+            if (request == null) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Real Time Data Request Failed: Request cannot be null."));
+
                 return -1;
             }
 
             if (request.Instrument == null) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Real Time Data Request Failed: null Instrument."));
+
                 return -1;
             }
 
-            request.RequestID = _requestCount++;
+            if (!Connected) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Could not request real time data - not connected."));
 
-            using (var ms = new MemoryStream()) {
-                lock (_reqSocketLock) {
+                return -1;
+            }
+
+            request.RequestID = Interlocked.Increment(ref _requestCount);
+
+            lock (_realTimeRequestSocketLock) {
+                if (_realTimeRequestSocket != null) {
                     // Two part message:
                     // 1: "RTD"
                     // 2: serialized RealTimeDataRequest
-                    _reqSocket.SendMoreFrame(string.Empty);
-                    _reqSocket.SendMoreFrame("RTD");
-                    _reqSocket.SendFrame(MyUtils.ProtoBufSerialize(request, ms));
+                    _realTimeRequestSocket.SendMoreFrame(string.Empty);
+                    _realTimeRequestSocket.SendMoreFrame("RTD");
+
+                    using (var ms = new MemoryStream()) {
+                        _realTimeRequestSocket.SendFrame(MyUtils.ProtoBufSerialize(request, ms));
+                    }
                 }
             }
 
@@ -232,27 +272,27 @@ namespace QDMSClient
         }
 
         /// <summary>
-        /// Tries to connect to the QDMS server.
+        ///     Tries to connect to the QDMS server.
         /// </summary>
         public void Connect()
         {
-            if (ClientConnected) {
+            if (Connected) {
                 return;
             }
 
-            lock (_reqSocketLock) {
-                _reqSocket = new DealerSocket($"tcp://{_host}:{_realTimeRequestPort}");
-                _reqSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
+            lock (_realTimeRequestSocketLock) {
+                _realTimeRequestSocket = new DealerSocket(_realTimeRequestConnectionString);
+                _realTimeRequestSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
                 // Start off by sending a ping to make sure everything is regular
                 var reply = string.Empty;
 
                 try {
-                    _reqSocket.SendMoreFrame(string.Empty).SendFrame("PING");
+                    _realTimeRequestSocket.SendMoreFrame(string.Empty).SendFrame("PING");
 
-                    reply = _reqSocket.ReceiveFrameString(); // Empty frame starts the REP message //todo receive string?
+                    reply = _realTimeRequestSocket.ReceiveFrameString(); // Empty frame starts the REP message //todo receive string?
 
                     if (reply != null) {
-                        reply = _reqSocket.ReceiveFrameString();
+                        reply = _realTimeRequestSocket.ReceiveFrameString();
                     }
                 }
                 catch {
@@ -261,11 +301,11 @@ namespace QDMSClient
 
                 if (reply != null && !reply.Equals("PONG", StringComparison.InvariantCultureIgnoreCase)) {
                     try {
-                        _reqSocket.Disconnect($"tcp://{_host}:{_realTimeRequestPort}");
+                        _realTimeRequestSocket.Disconnect(_realTimeRequestConnectionString);
                     }
                     finally {
-                        _reqSocket.Close();
-                        _reqSocket = null;
+                        _realTimeRequestSocket.Close();
+                        _realTimeRequestSocket = null;
                     }
 
                     RaiseEvent(Error, this, new ErrorArgs(-1, "Could not connect to server."));
@@ -273,41 +313,42 @@ namespace QDMSClient
                     return;
                 }
 
-                _reqSocket.ReceiveReady += ReqSocketReceiveReady;
+                _realTimeRequestSocket.ReceiveReady += RealTimeRequestSocketReceiveReady;
             }
 
-            lock (_subSocketLock) {
-                _subSocket = new SubscriberSocket($"tcp://{_host}:{_realTimePublishPort}");
-                _subSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
-                _subSocket.ReceiveReady += SubSocketReceiveReady;
+            lock (_realTimeDataSocketLock) {
+                _realTimeDataSocket = new SubscriberSocket(_realTimeDataConnectionString);
+                _realTimeDataSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
+                _realTimeDataSocket.ReceiveReady += RealTimeDataSocketReceiveReady;
             }
 
-            lock (_dealerSocketLock) {
-                _dealerSocket = new DealerSocket($"tcp://{_host}:{_historicalDataPort}");
-                _dealerSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
-                _dealerSocket.ReceiveReady += DealerSocketReceiveReady;
+            lock (_historicalDataSocketLock) {
+                _historicalDataSocket = new DealerSocket(_historicalDataConnectionString);
+                _historicalDataSocket.Options.Identity = Encoding.UTF8.GetBytes(_name);
+                _historicalDataSocket.ReceiveReady += HistoricalDataSocketReceiveReady;
             }
 
             _lastHeartBeat = DateTime.Now;
-            _running = true;
-            // This loop sends out historical data requests and receives the data
-            _dealerLoopThread = new Thread(DealerLoop) {Name = "Client Dealer Loop"};
-            _dealerLoopThread.Start();
 
-            _heartBeatTimer = new NetMQTimer(TimeSpan.FromSeconds(1));
-            _heartBeatTimer.Elapsed += TimerElapsed;
+            _heartBeatTimer = new NetMQTimer(TimeSpan.FromSeconds(HeartBeatPeriodInSeconds));
+            _heartBeatTimer.Elapsed += HeartBeatTimerElapsed;
 
-            // This loop takes care of replies to the request socket: heartbeats and data request status messages
-            _poller = new NetMQPoller {_reqSocket, _subSocket, _dealerSocket, _heartBeatTimer};
+            _historicalDataTimer = new NetMQTimer(TimeSpan.FromSeconds(HistoricalDataRequestsPeriodInSeconds));
+            _historicalDataTimer.Elapsed += HistoricalDataTimerElapsed;
+
+            _poller = new NetMQPoller {_realTimeRequestSocket, _realTimeDataSocket, _historicalDataSocket, _heartBeatTimer};
 
             _poller.RunAsync();
         }
 
         /// <summary>
-        /// Disconnects from the server.
+        ///     Disconnects from the server.
         /// </summary>
         public void Disconnect(bool cancelStreams = true)
         {
+            if (!PollerRunning) {
+                return;
+            }
             // Start by canceling all active real time streams
             if (cancelStreams) {
                 while (RealTimeDataStreams.Count > 0) {
@@ -315,50 +356,53 @@ namespace QDMSClient
                 }
             }
 
-            _running = false;
+            _poller?.Stop();
+            _poller?.Dispose();
 
-            if (_poller != null && _poller.IsRunning) {
-                _poller.Stop();
-            }
-
-            _heartBeatTimer?.Stop();
-
-            if (_dealerLoopThread != null && _dealerLoopThread.ThreadState == ThreadState.Running)
-                _dealerLoopThread.Join(10);
-
-            if (_reqSocket != null) {
-                try {
-                    _reqSocket.Disconnect($"tcp://{_host}:{_realTimeRequestPort}");
-                }
-                catch {
-                    _reqSocket.Dispose();
-                    _reqSocket = null;
+            lock (_realTimeRequestSocketLock) {
+                if (_realTimeRequestSocket != null) {
+                    try {
+                        _realTimeRequestSocket.Disconnect(_realTimeRequestConnectionString);
+                    }
+                    finally {
+                        _realTimeRequestSocket.ReceiveReady -= RealTimeRequestSocketReceiveReady;
+                        _realTimeRequestSocket.Close();
+                        _realTimeRequestSocket = null;
+                    }
                 }
             }
 
-            if (_subSocket != null) {
-                try {
-                    _subSocket.Disconnect($"tcp://{_host}:{_realTimePublishPort}");
-                }
-                catch {
-                    _subSocket.Dispose();
-                    _subSocket = null;
+            lock (_realTimeDataSocketLock) {
+                if (_realTimeDataSocket != null) {
+                    try {
+                        _realTimeDataSocket.Disconnect(_realTimeDataConnectionString);
+                    }
+                    finally {
+                        _realTimeDataSocket.ReceiveReady -= RealTimeDataSocketReceiveReady;
+                        _realTimeDataSocket.Close();
+                        _realTimeDataSocket = null;
+                    }
                 }
             }
 
-            if (_dealerSocket != null) {
-                try {
-                    _dealerSocket.Disconnect($"tcp://{_host}:{_historicalDataPort}");
-                }
-                catch {
-                    _dealerSocket.Dispose();
-                    _dealerSocket = null;
+            lock (_historicalDataSocket) {
+                if (_historicalDataSocket != null) {
+                    try {
+                        _historicalDataSocket.Disconnect(_historicalDataConnectionString);
+                    }
+                    finally {
+                        _historicalDataSocket.ReceiveReady -= HistoricalDataSocketReceiveReady;
+                        _historicalDataSocket.Close();
+                        _historicalDataSocket = null;
+                    }
                 }
             }
+
+            _poller = null;
         }
 
         /// <summary>
-        /// Query the server for contracts matching a particular set of features.
+        ///     Query the server for contracts matching a particular set of features.
         /// </summary>
         /// <param name="instrument">An Instrument object; any features that are not null will be search parameters. If null, all instruments are returned.</param>
         /// <returns>A list of instruments matching these features.</returns>
@@ -370,7 +414,7 @@ namespace QDMSClient
                 return new List<Instrument>();
             }
 
-            using (var s = new RequestSocket($"tcp://{_host}:{_instrumentServerPort}")) {
+            using (var s = new RequestSocket(_instrumentServerConnectionString)) {
                 using (var ms = new MemoryStream()) {
                     if (instrument == null) // All contracts
                     {
@@ -379,25 +423,26 @@ namespace QDMSClient
                     else // An actual search
                     {
                         s.SendMoreFrame("SEARCH"); // First we send a search request
-
                         // Then we need to serialize and send the instrument
                         s.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
                     }
-
                     // First we receive the size of the final uncompressed byte[] array
                     bool hasMore;
                     var sizeBuffer = s.ReceiveFrameBytes(out hasMore);
+
                     if (sizeBuffer.Length == 0) {
                         RaiseEvent(Error, this, new ErrorArgs(-1, "Contract request failed, received no reply."));
+
                         return new List<Instrument>();
                     }
 
                     var outputSize = BitConverter.ToInt32(sizeBuffer, 0);
-
                     // Then the actual data
                     var buffer = s.ReceiveFrameBytes(out hasMore);
+
                     if (buffer.Length == 0) {
                         RaiseEvent(Error, this, new ErrorArgs(-1, "Contract request failed, received no data."));
+
                         return new List<Instrument>();
                     }
 
@@ -407,12 +452,12 @@ namespace QDMSClient
                         var decoded = LZ4Codec.Decode(buffer, 0, buffer.Length, outputSize);
                         ms.Write(decoded, 0, decoded.Length);
                         ms.Position = 0;
-
                         // And finally deserializing
                         return Serializer.Deserialize<List<Instrument>>(ms);
                     }
                     catch (Exception ex) {
                         RaiseEvent(Error, this, new ErrorArgs(-1, "Error processing instrument data: " + ex.Message));
+
                         return new List<Instrument>();
                     }
                 }
@@ -420,30 +465,39 @@ namespace QDMSClient
         }
 
         /// <summary>
-        /// Cancel a live real time data stream.
+        ///     Cancel a live real time data stream.
         /// </summary>
         public void CancelRealTimeData(Instrument instrument)
         {
+            if (instrument == null) {
+                RaiseEvent(Error, this, new ErrorArgs(-1, "Instrument cannot be null."));
+
+                return;
+            }
+
             if (!Connected) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not cancel real time data - not connected."));
 
                 return;
             }
 
-            if (_reqSocket != null) {
-                lock (_reqSocketLock) {
+            lock (_realTimeRequestSocketLock) {
+                if (_realTimeRequestSocket != null) {
                     // Two part message:
                     // 1: "CANCEL"
                     // 2: serialized Instrument object
+                    _realTimeRequestSocket.SendMoreFrame(string.Empty);
+                    _realTimeRequestSocket.SendMoreFrame("CANCEL");
+
                     using (var ms = new MemoryStream()) {
-                        _reqSocket.SendMoreFrame("");
-                        _reqSocket.SendMoreFrame("CANCEL");
-                        _reqSocket.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
+                        _realTimeRequestSocket.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
                     }
                 }
             }
 
-            _subSocket?.Unsubscribe(Encoding.UTF8.GetBytes(instrument.Symbol));
+            lock (_realTimeDataSocketLock) {
+                _realTimeDataSocket?.Unsubscribe(Encoding.UTF8.GetBytes(instrument.Symbol));
+            }
 
             lock (_realTimeDataStreamsLock) {
                 RealTimeDataStreams.RemoveAll(x => x.Instrument.ID == instrument.ID);
@@ -451,7 +505,7 @@ namespace QDMSClient
         }
 
         /// <summary>
-        /// Get a list of all available instruments
+        ///     Get a list of all available instruments
         /// </summary>
         /// <returns></returns>
         public List<Instrument> GetAllInstruments()
@@ -461,7 +515,7 @@ namespace QDMSClient
         #endregion
 
         /// <summary>
-        /// Initialization constructor.
+        ///     Initialization constructor.
         /// </summary>
         /// <param name="clientName">The name of this client. Should be unique. Used to route historical data.</param>
         /// <param name="host">The address of the server.</param>
@@ -471,21 +525,18 @@ namespace QDMSClient
         /// <param name="historicalDataPort">The port used for historical data.</param>
         public QDMSClient(string clientName, string host, int realTimeRequestPort, int realTimePublishPort, int instrumentServerPort, int historicalDataPort)
         {
-            _host = host;
             _name = clientName;
-            _realTimeRequestPort = realTimeRequestPort;
-            _realTimePublishPort = realTimePublishPort;
-            _instrumentServerPort = instrumentServerPort;
-            _historicalDataPort = historicalDataPort;
 
+            _realTimeRequestConnectionString = $"tcp://{host}:{realTimeRequestPort}";
+            _realTimeDataConnectionString = $"tcp://{host}:{realTimePublishPort}";
+            _instrumentServerConnectionString = $"tcp://{host}:{instrumentServerPort}";
+            _historicalDataConnectionString = $"tcp://{host}:{historicalDataPort}";
 
             _historicalDataRequests = new ConcurrentQueue<HistoricalDataRequest>();
-            PendingHistoricalRequests = new ObservableCollection<HistoricalDataRequest>();
-            RealTimeDataStreams = new ObservableCollection<RealTimeDataRequest>();
         }
 
         /// <summary>
-        /// Add an instrument to QDMS.
+        ///     Add an instrument to QDMS.
         /// </summary>
         /// <param name="instrument"></param>
         /// <returns>The instrument with its ID set if successful, null otherwise.</returns>
@@ -493,31 +544,29 @@ namespace QDMSClient
         {
             if (!Connected) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not add instrument - not connected."));
+
                 return null;
             }
 
             if (instrument == null) {
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Could not add instrument - instrument is null."));
+
                 return null;
             }
 
-            using (var s = new RequestSocket($"tcp://{_host}:{_instrumentServerPort}")) {
+            using (var s = new RequestSocket(_instrumentServerConnectionString)) {
                 using (var ms = new MemoryStream()) {
-
                     s.SendMoreFrame("ADD"); // First we send an "ADD" request
-
                     // Then we need to serialize and send the instrument
                     s.SendFrame(MyUtils.ProtoBufSerialize(instrument, ms));
-
                     // Then get the reply
-                    var result = s.ReceiveString(TimeSpan.FromSeconds(1));
+                    var result = s.ReceiveFrameString();
 
-                    if (result != "SUCCESS") {
+                    if (result.Equals("SUCCESS", StringComparison.InvariantCultureIgnoreCase)) {
                         RaiseEvent(Error, this, new ErrorArgs(-1, "Instrument addition failed: received no reply."));
 
                         return null;
                     }
-
                     // Addition was successful, receive the instrument and return it
                     var serializedInstrument = s.ReceiveFrameBytes();
 
@@ -526,135 +575,97 @@ namespace QDMSClient
             }
         }
 
-        // The timer sends heartbeat messages so we know that the server is still up.
-        private void TimerElapsed(object sender, NetMQTimerEventArgs e)
-        {
-            lock (_reqSocketLock) {
-                _reqSocket.SendMoreFrame(string.Empty);
-                _reqSocket.SendFrame("PING");
-            }
-        }
-
+        #region Event handlers
         /// <summary>
-        /// Process replies on the request socket.
-        /// Heartbeats, errors, and subscribing to real time data streams.
+        ///     Process replies on the request socket.
+        ///     Heartbeats, errors, and subscribing to real time data streams.
         /// </summary>
-        private void ReqSocketReceiveReady(object sender, NetMQSocketEventArgs e)
+        private void RealTimeRequestSocketReceiveReady(object sender, NetMQSocketEventArgs e)
         {
-            using (var ms = new MemoryStream()) {
-                lock (_reqSocketLock) {
-                    var reply = _reqSocket.ReceiveFrameString();
+            lock (_realTimeRequestSocketLock) {
+                using (var ms = new MemoryStream()) {
+                    var reply = _realTimeRequestSocket?.ReceiveFrameString();
 
-                    if (reply == null) return;
-
-                    reply = _reqSocket.ReceiveFrameString();
-
-                    switch (reply) {
-                        case "PONG": // Reply to heartbeat message
-                            _lastHeartBeat = DateTime.Now;
-                            break;
-
-                        case "ERROR": // Something went wrong
-                            {
-                            // First the message
-                            var error = _reqSocket.ReceiveFrameString();
-
-                            // Then the request
-                            var buffer = _reqSocket.ReceiveFrameBytes();
-                            var request = MyUtils.ProtoBufDeserialize<RealTimeDataRequest>(buffer, ms);
-
-                            // Error event
-                            RaiseEvent(Error, this, new ErrorArgs(-1, "Real time data request error: " + error, request.RequestID));
-
-                            return;
-                            }
-                        case "SUCCESS": // Successful request to start a new real time data stream
-                            {
-                            // Receive the request
-                            var buffer = _reqSocket.ReceiveFrameBytes();
-                            var request = MyUtils.ProtoBufDeserialize<RealTimeDataRequest>(buffer, ms);
-
-                            // Add it to the active streams
-                            lock (_realTimeDataStreamsLock) {
-                                RealTimeDataStreams.Add(request);
-                            }
-
-                            // Request worked, so we subscribe to the stream
-                            _subSocket.Subscribe(BitConverter.GetBytes(request.Instrument.ID.Value));
-                            }
-                            break;
-
-                        case "CANCELED": // Successful cancelation of a real time data stream
-                            {
-                            // Also receive the symbol
-                            var symbol = _reqSocket.ReceiveFrameString();
-                            // Nothing to do?
-                            }
-                            break;
+                    if (reply == null) {
+                        return;
                     }
-                }
-            }
-        }
 
-        /// <summary>
-        /// Dealer socket sends out requests for historical data and raises an event when it's received
-        /// </summary>
-        private void DealerLoop()
-        {
-            using (var ms = new MemoryStream()) {
-                try {
-                    while (_running) {
-                        // Send any pending historical data requests
-                        lock (_dealerSocketLock) {
-                            SendQueuedHistoricalRequests(ms);
+                    reply = _realTimeRequestSocket.ReceiveFrameString();
+
+                    if (reply.Equals("PONG", StringComparison.InvariantCultureIgnoreCase)) {
+                        // Reply to heartbeat message
+                        _lastHeartBeat = DateTime.Now;
+                    }
+                    else if (reply.Equals("ERROR", StringComparison.InvariantCultureIgnoreCase)) {
+                        // Something went wrong
+                        // First the message
+                        var error = _realTimeRequestSocket.ReceiveFrameString();
+                        // Then the request
+                        var buffer = _realTimeRequestSocket.ReceiveFrameBytes();
+                        var request = MyUtils.ProtoBufDeserialize<RealTimeDataRequest>(buffer, ms);
+                        // Error event
+                        RaiseEvent(Error, this, new ErrorArgs(-1, "Real time data request error: " + error, request.RequestID));
+
+                        return;
+                    }
+                    else if (reply.Equals("SUCCESS", StringComparison.InvariantCultureIgnoreCase)) {
+                        // Successful request to start a new real time data stream
+                        // Receive the request
+                        var buffer = _realTimeRequestSocket.ReceiveFrameBytes();
+                        var request = MyUtils.ProtoBufDeserialize<RealTimeDataRequest>(buffer, ms);
+                        // Add it to the active streams
+                        lock (_realTimeDataStreamsLock) {
+                            RealTimeDataStreams.Add(request);
                         }
-
-                        Thread.Sleep(10);
+                        // TODO: Solve issue with null request
+                        // Request worked, so we subscribe to the stream
+                        _realTimeDataSocket.Subscribe(BitConverter.GetBytes(request.Instrument.ID.Value));
+                    }
+                    else if (reply.Equals("CANCELED", StringComparison.InvariantCultureIgnoreCase)) {
+                        // Successful cancelation of a real time data stream
+                        // Also receive the symbol
+                        var symbol = _realTimeRequestSocket.ReceiveFrameString();
+                        // Nothing to do?
                     }
                 }
-                catch {
-                    Dispose();
-                }
             }
         }
 
-        private void SendQueuedHistoricalRequests(MemoryStream ms)
+        private void RealTimeDataSocketReceiveReady(object sender, NetMQSocketEventArgs e)
         {
-            while (!_historicalDataRequests.IsEmpty) {
-                HistoricalDataRequest request;
-
-                if (_historicalDataRequests.TryDequeue(out request)) {
-                    var buffer = MyUtils.ProtoBufSerialize(request, ms);
-
-                    _dealerSocket.SendMoreFrame("HISTREQ");
-                    _dealerSocket.SendFrame(buffer);
+            lock (_realTimeDataSocketLock) {
+                if (_realTimeDataSocket == null) {
+                    return;
                 }
-            }
-        }
 
-        private void SubSocketReceiveReady(object sender, NetMQSocketEventArgs e)
-        {
-            bool hasMore;
+                bool hasMore;
 
-            _subSocket.ReceiveFrameBytes(out hasMore);
+                _realTimeDataSocket.ReceiveFrameBytes(out hasMore);
 
-            if (hasMore) {
-                var buffer = _subSocket.ReceiveFrameBytes();
-                var bar = MyUtils.ProtoBufDeserialize<RealTimeDataEventArgs>(buffer, new MemoryStream());
+                if (hasMore) {
+                    var buffer = _realTimeDataSocket.ReceiveFrameBytes();
 
-                RaiseEvent(RealTimeDataReceived, null, bar);
+                    using (var ms = new MemoryStream()) {
+                        var bar = MyUtils.ProtoBufDeserialize<RealTimeDataEventArgs>(buffer, ms);
+
+                        RaiseEvent(RealTimeDataReceived, null, bar);
+                    }
+                }
             }
         }
 
         /// <summary>
-        /// Handling replies to a data push, a historical data request, or an available data request
+        ///     Handling replies to a data push, a historical data request, or an available data request
         /// </summary>
-        private void DealerSocketReceiveReady(object sender, NetMQSocketEventArgs e)
+        private void HistoricalDataSocketReceiveReady(object sender, NetMQSocketEventArgs e)
         {
-            lock (_dealerSocketLock) {
+            lock (_historicalDataSocketLock) {
+                if (_historicalDataSocket == null) {
+                    return;
+                }
                 // 1st message part: what kind of stuff we're receiving
-                var type = _dealerSocket.ReceiveFrameString();
-
+                var type = _historicalDataSocket.ReceiveFrameString();
+                // TODO: Use if (type.Equals(...)) instead of switch
                 switch (type) {
                     case "PUSHREP":
                         HandleDataPushReply();
@@ -674,40 +685,78 @@ namespace QDMSClient
                 }
             }
         }
+        #endregion
+
+        #region Timer handlers
+        /// <summary>
+        ///     Sends heartbeat messages so we know that the server is still up.
+        /// </summary>
+        private void HeartBeatTimerElapsed(object sender, NetMQTimerEventArgs e)
+        {
+            lock (_realTimeRequestSocketLock) {
+                if (PollerRunning && _realTimeRequestSocket != null) {
+                    _realTimeRequestSocket.SendMoreFrame(string.Empty);
+                    _realTimeRequestSocket.SendFrame("PING");
+                }
+            }
+        }
 
         /// <summary>
-        /// Called when we get some sort of error reply
+        ///     Sends out requests for historical data and raises an event when it's received.
+        /// </summary>
+        private void HistoricalDataTimerElapsed(object sender, NetMQTimerEventArgs e)
+        {
+            // TODO: Solve issue with _poller and socket in Disconnect method and here
+            lock (_historicalDataSocketLock) {
+                if (PollerRunning && _historicalDataSocket != null) {
+                    while (!_historicalDataRequests.IsEmpty) {
+                        HistoricalDataRequest request;
+
+                        if (_historicalDataRequests.TryDequeue(out request)) {
+                            using (var ms = new MemoryStream()) {
+                                var buffer = MyUtils.ProtoBufSerialize(request, ms);
+
+                                _historicalDataSocket.SendMoreFrame("HISTREQ");
+                                _historicalDataSocket.SendFrame(buffer);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #endregion
+
+        /// <summary>
+        ///     Called when we get some sort of error reply
         /// </summary>
         private void HandleErrorReply()
         {
             // The request ID
             bool hasMore;
-            var buffer = _dealerSocket.ReceiveFrameBytes(out hasMore);
+            var buffer = _historicalDataSocket.ReceiveFrameBytes(out hasMore);
             if (!hasMore) return;
             var requestId = BitConverter.ToInt32(buffer, 0);
-
             // Remove from pending requests
             lock (_pendingHistoricalRequestsLock) {
                 PendingHistoricalRequests.RemoveAll(x => x.RequestID == requestId);
             }
-
             // Finally the error message
-            var message = _dealerSocket.ReceiveFrameString();
+            var message = _historicalDataSocket.ReceiveFrameString();
             // Raise the error event
             RaiseEvent(Error, this, new ErrorArgs(-1, message, requestId));
         }
 
         /// <summary>
-        /// Called when we get a reply on a request for available data in local storage.
+        ///     Called when we get a reply on a request for available data in local storage.
         /// </summary>
         private void HandleAvailabledataReply()
         {
             // First the instrument
             using (var ms = new MemoryStream()) {
-                var buffer = _dealerSocket.ReceiveFrameBytes();
+                var buffer = _historicalDataSocket.ReceiveFrameBytes();
                 var instrument = MyUtils.ProtoBufDeserialize<Instrument>(buffer, ms);
                 // Second the number of items
-                buffer = _dealerSocket.ReceiveFrameBytes();
+                buffer = _historicalDataSocket.ReceiveFrameBytes();
                 var count = BitConverter.ToInt32(buffer, 0);
                 // Then actually get the items, if any
                 if (count == 0) {
@@ -715,12 +764,13 @@ namespace QDMSClient
                 }
                 else {
                     var storageInfo = new List<StoredDataInfo>();
+
                     for (var i = 0;i < count;i++) {
-                        buffer = _dealerSocket.ReceiveFrameBytes();
+                        buffer = _historicalDataSocket.ReceiveFrameBytes();
                         var info = MyUtils.ProtoBufDeserialize<StoredDataInfo>(buffer, ms);
                         storageInfo.Add(info);
 
-                        if (!_dealerSocket.Options.ReceiveMore) break;
+                        if (!_historicalDataSocket.Options.ReceiveMore) break;
                     }
 
                     RaiseEvent(LocallyAvailableDataInfoReceived, this, new LocallyAvailableDataInfoReceivedEventArgs(instrument, storageInfo));
@@ -729,48 +779,50 @@ namespace QDMSClient
         }
 
         /// <summary>
-        /// Called on a reply to a data push
+        ///     Called on a reply to a data push
         /// </summary>
         private void HandleDataPushReply()
         {
-            var result = _dealerSocket.ReceiveFrameString();
+            var result = _historicalDataSocket.ReceiveFrameString();
 
             if (result == "OK") // Everything is alright
             {}
             else if (result == "ERROR") {
                 // Receive the error
-                var error = _dealerSocket.ReceiveFrameString();
+                var error = _historicalDataSocket.ReceiveFrameString();
+
                 RaiseEvent(Error, this, new ErrorArgs(-1, "Data push error: " + error));
             }
         }
 
         /// <summary>
-        /// Called ona reply to a historical data request
+        ///     Called ona reply to a historical data request
         /// </summary>
         private void HandleHistoricalDataRequestReply()
         {
-            var ms = new MemoryStream();
-            // 2nd message part: the HistoricalDataRequest object that was used to make the request
-            bool hasMore;
-            var requestBuffer = _dealerSocket.ReceiveFrameBytes(out hasMore);
-            if (!hasMore) return;
+            using (var ms = new MemoryStream()) {
+                // 2nd message part: the HistoricalDataRequest object that was used to make the request
+                bool hasMore;
+                var requestBuffer = _historicalDataSocket.ReceiveFrameBytes(out hasMore);
+                if (!hasMore) return;
 
-            var request = MyUtils.ProtoBufDeserialize<HistoricalDataRequest>(requestBuffer, ms);
-            // 3rd message part: the size of the uncompressed, serialized data. Necessary for decompression.
-            var sizeBuffer = _dealerSocket.ReceiveFrameBytes(out hasMore);
-            if (!hasMore) return;
+                var request = MyUtils.ProtoBufDeserialize<HistoricalDataRequest>(requestBuffer, ms);
+                // 3rd message part: the size of the uncompressed, serialized data. Necessary for decompression.
+                var sizeBuffer = _historicalDataSocket.ReceiveFrameBytes(out hasMore);
+                if (!hasMore) return;
 
-            var outputSize = BitConverter.ToInt32(sizeBuffer, 0);
-            // 4th message part: the compressed serialized data.
-            var dataBuffer = _dealerSocket.ReceiveFrameBytes();
-            var decompressed = LZ4Codec.Decode(dataBuffer, 0, dataBuffer.Length, outputSize);
-            var data = MyUtils.ProtoBufDeserialize<List<OHLCBar>>(decompressed, ms);
-            // Remove from pending requests
-            lock (_pendingHistoricalRequestsLock) {
-                PendingHistoricalRequests.RemoveAll(x => x.RequestID == request.RequestID);
+                var outputSize = BitConverter.ToInt32(sizeBuffer, 0);
+                // 4th message part: the compressed serialized data.
+                var dataBuffer = _historicalDataSocket.ReceiveFrameBytes();
+                var decompressed = LZ4Codec.Decode(dataBuffer, 0, dataBuffer.Length, outputSize);
+                var data = MyUtils.ProtoBufDeserialize<List<OHLCBar>>(decompressed, ms);
+                // Remove from pending requests
+                lock (_pendingHistoricalRequestsLock) {
+                    PendingHistoricalRequests.RemoveAll(x => x.RequestID == request.RequestID);
+                }
+
+                RaiseEvent(HistoricalDataReceived, this, new HistoricalDataEventArgs(request, data));
             }
-
-            RaiseEvent(HistoricalDataReceived, this, new HistoricalDataEventArgs(request, data));
         }
 
         /// <summary>
