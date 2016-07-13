@@ -45,6 +45,7 @@ namespace QDMSTest
                 instrumentsServer.StartServer();
 
                 var rtdBrokerMock = new Mock<IRealTimeDataBroker>();
+
                 using (var rtdServer = new RealTimeDataServer(5554, 5553, rtdBrokerMock.Object)) {
                     rtdServer.StartServer();
 

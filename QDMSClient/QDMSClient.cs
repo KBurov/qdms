@@ -560,7 +560,7 @@ namespace QDMSClient
                     // Then get the reply
                     var result = s.ReceiveFrameString();
 
-                    if (result.Equals("SUCCESS", StringComparison.InvariantCultureIgnoreCase)) {
+                    if (!result.Equals("SUCCESS", StringComparison.InvariantCultureIgnoreCase)) {
                         RaiseEvent(Error, this, new ErrorArgs(-1, "Instrument addition failed: received no reply."));
 
                         return null;
