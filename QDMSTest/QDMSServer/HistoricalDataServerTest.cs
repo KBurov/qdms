@@ -6,11 +6,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 using Moq;
 
 using NUnit.Framework;
+
+using Ploeh.AutoFixture;
 
 using QDMS;
 
@@ -46,8 +49,9 @@ namespace QDMSTest
         [TearDown]
         public void TearDown()
         {
-            _hdServer.Dispose();
             _client.Dispose();
+            _hdServer.Dispose();
+            _rtServer.Dispose();
         }
 
         [Test]
@@ -68,8 +72,8 @@ namespace QDMSTest
             var request = new HistoricalDataRequest(instrument, BarSize.OneDay, new DateTime(2012, 1, 1), new DateTime(2013, 1, 1));
 
             _client.RequestHistoricalData(request);
-
-            Thread.Sleep(500);
+            // TODO: Think about delay amount
+            Thread.Sleep(1500);
 
             _historicalDataBrokerMock.Verify(
                 x => x.RequestHistoricalData(
@@ -92,6 +96,7 @@ namespace QDMSTest
         public void StopServerStopsTheServer()
         {
             _hdServer.StopServer();
+
             Assert.IsFalse(_hdServer.ServerRunning);
         }
 
@@ -111,7 +116,7 @@ namespace QDMSTest
             var req = new DataAdditionRequest(BarSize.OneDay, instrument, data);
 
             _client.PushData(req);
-
+            // TODO: Think about delay amount
             Thread.Sleep(50);
 
             _historicalDataBrokerMock.Verify(
@@ -128,6 +133,7 @@ namespace QDMSTest
         [Test]
         public void AcceptAvailableDataRequestsAreForwardedToTheHistoricalDataBroker()
         {
+            var fixture = new Fixture();
             var instrument = new Instrument
             {
                 ID = 1,
@@ -135,8 +141,12 @@ namespace QDMSTest
                 Datasource = new Datasource {ID = 1, Name = "MockSource"}
             };
 
-            _client.GetLocallyAvailableDataInfo(instrument);
+            _historicalDataBrokerMock
+                .Setup(x => x.GetAvailableDataInfo(It.Is<Instrument>(i => i.ID.HasValue && i.ID.Value == 1 && i.Symbol.Equals("SPY", StringComparison.InvariantCultureIgnoreCase))))
+                .Returns(fixture.CreateMany<StoredDataInfo>().ToList());
 
+            _client.GetLocallyAvailableDataInfo(instrument);
+            // TODO: Think about delay amount
             Thread.Sleep(1000);
 
             _historicalDataBrokerMock.Verify(
@@ -173,8 +183,8 @@ namespace QDMSTest
             _historicalDataBrokerMock.Setup(x => x.RequestHistoricalData(It.IsAny<HistoricalDataRequest>())).Throws(new Exception("error message"));
 
             _client.RequestHistoricalData(request);
-
-            Thread.Sleep(500);
+            // TODO: Think about delay amount
+            Thread.Sleep(1500);
 
             Assert.IsTrue(errorRaised);
         }

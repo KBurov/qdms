@@ -7,14 +7,19 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+
 using Moq;
+
 using NUnit.Framework;
+
 using QDMS;
+
 using QDMSServer;
 
 namespace QDMSTest
 {
     [TestFixture]
+    // ReSharper disable once InconsistentNaming
     public class QDMSClientTest
     {
         private QDMSClient.QDMSClient _client;
@@ -35,47 +40,57 @@ namespace QDMSTest
         public void InstrumentAdditionRequestsAreSentCorrectly()
         {
             var instrumentSourceMock = new Mock<IInstrumentSource>();
-            var instrumentsServer = new InstrumentsServer(5555, instrumentSourceMock.Object);
-            instrumentsServer.StartServer();
 
-            var rtdBrokerMock = new Mock<IRealTimeDataBroker>();
-            var rtdServer = new RealTimeDataServer(5554, 5553, rtdBrokerMock.Object);
-            rtdServer.StartServer();
+            using (var instrumentsServer = new InstrumentsServer(5555, instrumentSourceMock.Object)) {
+                instrumentsServer.StartServer();
 
-            
+                var rtdBrokerMock = new Mock<IRealTimeDataBroker>();
+                using (var rtdServer = new RealTimeDataServer(5554, 5553, rtdBrokerMock.Object)) {
+                    rtdServer.StartServer();
 
-            _client.Connect();
+                    _client.Connect();
 
-            var exchange = new Exchange() { ID = 1, Name = "NYSE", Sessions = new List<ExchangeSession>(), Timezone = "Eastern Standard Time" };
-            var datasource = new Datasource() { ID = 1, Name = "Yahoo" };
-            var instrument = new Instrument() { Symbol = "SPY", UnderlyingSymbol = "SPY", Type = InstrumentType.Stock, Currency = "USD", Exchange = exchange, Datasource = datasource, Multiplier = 1 };
+                    var exchange = new Exchange {ID = 1, Name = "NYSE", Sessions = new List<ExchangeSession>(), Timezone = "Eastern Standard Time"};
+                    var datasource = new Datasource {ID = 1, Name = "Yahoo"};
+                    var instrument = new Instrument
+                    {
+                        Symbol = "SPY",
+                        UnderlyingSymbol = "SPY",
+                        Type = InstrumentType.Stock,
+                        Currency = "USD",
+                        Exchange = exchange,
+                        Datasource = datasource,
+                        Multiplier = 1
+                    };
 
-            instrumentSourceMock.Setup(x => x.AddInstrument(It.IsAny<Instrument>(), It.IsAny<bool>(), It.IsAny<bool>())).Returns(instrument);
-            
-            Instrument result = _client.AddInstrument(instrument);
+                    instrumentSourceMock.Setup(x => x.AddInstrument(It.IsAny<Instrument>(), It.IsAny<bool>(), It.IsAny<bool>())).Returns(instrument);
 
-            Thread.Sleep(50);
+                    var result = _client.AddInstrument(instrument);
 
-            Assert.IsTrue(result != null);
+                    Thread.Sleep(50);
 
-            instrumentSourceMock.Verify(x => x.AddInstrument(
-                It.Is<Instrument>(y =>
-                    y.Symbol == "SPY" &&
-                    y.Exchange != null &&
-                    y.Exchange.Name == "NYSE" &&
-                    y.Datasource != null &&
-                    y.Datasource.Name == "Yahoo" &&
-                    y.Type == InstrumentType.Stock &&
-                    y.Currency == "USD" &&
-                    y.Multiplier == 1),
-                It.Is<bool>(y => y == false),
-                It.Is<bool>(y => y == true)));
+                    Assert.IsTrue(result != null);
 
-            rtdServer.StopServer();
-            rtdServer.Dispose();
+                    instrumentSourceMock.Verify(
+                        x => x.AddInstrument(
+                            It.Is<Instrument>(
+                                y =>
+                                    y.Symbol == "SPY" &&
+                                    y.Exchange != null &&
+                                    y.Exchange.Name == "NYSE" &&
+                                    y.Datasource != null &&
+                                    y.Datasource.Name == "Yahoo" &&
+                                    y.Type == InstrumentType.Stock &&
+                                    y.Currency == "USD" &&
+                                    y.Multiplier == 1),
+                            It.Is<bool>(y => y == false),
+                            It.Is<bool>(y => y)));
 
-            instrumentsServer.StopServer();
-            instrumentsServer.Dispose();
+                    rtdServer.StopServer();
+                }
+
+                instrumentsServer.StopServer();
+            }
         }
 
         [Test]
@@ -83,13 +98,13 @@ namespace QDMSTest
         {
             var req = new HistoricalDataRequest
             {
-                Instrument = new Instrument { ID = 1, Symbol = "SPY" },
+                Instrument = new Instrument {ID = 1, Symbol = "SPY"},
                 StartingDate = new DateTime(2012, 1, 1),
                 EndingDate = new DateTime(2011, 1, 1),
                 Frequency = BarSize.OneDay
             };
 
-            bool errorTriggered = false;
+            var errorTriggered = false;
             _client.Error += (sender, e) => errorTriggered = true;
 
             Assert.AreEqual(-1, _client.RequestHistoricalData(req));
@@ -102,13 +117,13 @@ namespace QDMSTest
         {
             var req = new HistoricalDataRequest
             {
-                Instrument = new Instrument { ID = 1, Symbol = "SPY" },
+                Instrument = new Instrument {ID = 1, Symbol = "SPY"},
                 StartingDate = new DateTime(2012, 1, 1),
                 EndingDate = new DateTime(2013, 1, 1),
                 Frequency = BarSize.OneDay
             };
 
-            bool errorTriggered = false;
+            var errorTriggered = false;
             _client.Error += (sender, e) => errorTriggered = true;
 
             Assert.AreEqual(-1, _client.RequestHistoricalData(req));
@@ -127,7 +142,7 @@ namespace QDMSTest
                 Frequency = BarSize.OneDay
             };
 
-            bool errorTriggered = false;
+            var errorTriggered = false;
             _client.Error += (sender, e) => errorTriggered = true;
 
             Assert.AreEqual(-1, _client.RequestHistoricalData(req));
@@ -143,7 +158,7 @@ namespace QDMSTest
                 Instrument = null
             };
 
-            bool errorTriggered = false;
+            var errorTriggered = false;
             _client.Error += (sender, e) => errorTriggered = true;
 
             Assert.AreEqual(-1, _client.RequestRealTimeData(req));
@@ -156,10 +171,10 @@ namespace QDMSTest
         {
             var req = new RealTimeDataRequest
             {
-                Instrument = new Instrument { ID = 1, Symbol = "SPY" }
+                Instrument = new Instrument {ID = 1, Symbol = "SPY"}
             };
 
-            bool errorTriggered = false;
+            var errorTriggered = false;
             _client.Error += (sender, e) => errorTriggered = true;
 
             Assert.AreEqual(-1, _client.RequestRealTimeData(req));

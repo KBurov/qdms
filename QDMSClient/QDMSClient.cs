@@ -28,7 +28,7 @@ namespace QDMSClient
     // ReSharper disable once InconsistentNaming
     public class QDMSClient : IDataClient
     {
-        private const int HistoricalDataRequestsPeriodInSeconds = 10;
+        private const int HistoricalDataRequestsPeriodInSeconds = 1;
         private const int HeartBeatPeriodInSeconds = 1;
 
         #region Variables
@@ -289,17 +289,15 @@ namespace QDMSClient
                 try {
                     _realTimeRequestSocket.SendMoreFrame(string.Empty).SendFrame("PING");
 
-                    reply = _realTimeRequestSocket.ReceiveFrameString(); // Empty frame starts the REP message //todo receive string?
-
-                    if (reply != null) {
-                        reply = _realTimeRequestSocket.ReceiveFrameString();
+                    if (_realTimeRequestSocket.TryReceiveFrameString(TimeSpan.FromSeconds(1), out reply)) {
+                        _realTimeRequestSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(50), out reply);
                     }
                 }
                 catch {
                     Disconnect();
                 }
 
-                if (reply != null && !reply.Equals("PONG", StringComparison.InvariantCultureIgnoreCase)) {
+                if (reply == null || !reply.Equals("PONG", StringComparison.InvariantCultureIgnoreCase)) {
                     try {
                         _realTimeRequestSocket.Disconnect(_realTimeRequestConnectionString);
                     }
@@ -336,7 +334,7 @@ namespace QDMSClient
             _historicalDataTimer = new NetMQTimer(TimeSpan.FromSeconds(HistoricalDataRequestsPeriodInSeconds));
             _historicalDataTimer.Elapsed += HistoricalDataTimerElapsed;
 
-            _poller = new NetMQPoller {_realTimeRequestSocket, _realTimeDataSocket, _historicalDataSocket, _heartBeatTimer};
+            _poller = new NetMQPoller {_realTimeRequestSocket, _realTimeDataSocket, _historicalDataSocket, _heartBeatTimer, _historicalDataTimer};
 
             _poller.RunAsync();
         }
@@ -605,8 +603,6 @@ namespace QDMSClient
                         var request = MyUtils.ProtoBufDeserialize<RealTimeDataRequest>(buffer, ms);
                         // Error event
                         RaiseEvent(Error, this, new ErrorArgs(-1, "Real time data request error: " + error, request.RequestID));
-
-                        return;
                     }
                     else if (reply.Equals("SUCCESS", StringComparison.InvariantCultureIgnoreCase)) {
                         // Successful request to start a new real time data stream
@@ -706,18 +702,24 @@ namespace QDMSClient
         /// </summary>
         private void HistoricalDataTimerElapsed(object sender, NetMQTimerEventArgs e)
         {
+            if (!Connected) {
+                return;
+            }
             // TODO: Solve issue with _poller and socket in Disconnect method and here
-            lock (_historicalDataSocketLock) {
-                if (PollerRunning && _historicalDataSocket != null) {
-                    while (!_historicalDataRequests.IsEmpty) {
-                        HistoricalDataRequest request;
+            while (!_historicalDataRequests.IsEmpty) {
+                HistoricalDataRequest request;
 
-                        if (_historicalDataRequests.TryDequeue(out request)) {
-                            using (var ms = new MemoryStream()) {
-                                var buffer = MyUtils.ProtoBufSerialize(request, ms);
+                if (_historicalDataRequests.TryDequeue(out request)) {
+                    using (var ms = new MemoryStream()) {
+                        var buffer = MyUtils.ProtoBufSerialize(request, ms);
 
+                        lock (_historicalDataSocketLock) {
+                            if (PollerRunning && _historicalDataSocket != null) {
                                 _historicalDataSocket.SendMoreFrame("HISTREQ");
                                 _historicalDataSocket.SendFrame(buffer);
+                            }
+                            else {
+                                return;
                             }
                         }
                     }
