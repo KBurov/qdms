@@ -20,6 +20,8 @@ namespace QDMSTest
     [TestFixture]
     public class RealTimeDataServerTest
     {
+        private const int DefaultDelayInMilliseconds = 100;
+
         private RealTimeDataServer _rtServer;
         private QDMSClient.QDMSClient _client;
         private Mock<IRealTimeDataBroker> _brokerMock;
@@ -52,6 +54,8 @@ namespace QDMSTest
 
             _client.RequestRealTimeData(req);
 
+            Thread.Sleep(DefaultDelayInMilliseconds);
+
             _brokerMock.Verify(
                 x => x.RequestRealTimeData(
                     It.Is<RealTimeDataRequest>(
@@ -70,6 +74,8 @@ namespace QDMSTest
             var inst = new Instrument {ID = 15, Datasource = ds, DatasourceID = 1, Symbol = "SPY", Type = InstrumentType.Stock};
 
             _client.CancelRealTimeData(inst);
+
+            Thread.Sleep(DefaultDelayInMilliseconds);
 
             _brokerMock.Verify(x => x.CancelRTDStream(It.Is<int>(y => y == 15)));
         }
@@ -92,7 +98,7 @@ namespace QDMSTest
 
             _client.RequestRealTimeData(req);
 
-            Thread.Sleep(100);
+            Thread.Sleep(DefaultDelayInMilliseconds);
 
             Assert.IsTrue(!string.IsNullOrEmpty(error));
             Assert.IsTrue(requestId.HasValue);
@@ -115,7 +121,7 @@ namespace QDMSTest
 
             _client.RequestRealTimeData(req);
 
-            Thread.Sleep(100);
+            Thread.Sleep(DefaultDelayInMilliseconds);
 
             Assert.IsTrue(!string.IsNullOrEmpty(error));
             Assert.IsTrue(requestId.HasValue);
@@ -141,7 +147,7 @@ namespace QDMSTest
 
             _client.RequestRealTimeData(req);
 
-            Thread.Sleep(100);
+            Thread.Sleep(DefaultDelayInMilliseconds);
 
             Assert.IsTrue(!string.IsNullOrEmpty(error));
             Assert.IsTrue(requestId.HasValue);
@@ -158,7 +164,7 @@ namespace QDMSTest
 
             _client.RequestRealTimeData(req);
 
-            Thread.Sleep(50);
+            Thread.Sleep(DefaultDelayInMilliseconds);
 
             RealTimeDataEventArgs receivedData = null;
 
@@ -168,7 +174,7 @@ namespace QDMSTest
 
             _brokerMock.Raise(x => x.RealTimeDataArrived += null, new RealTimeDataEventArgs(15, dt, 100m, 105m, 95m, 99m, 10000000, 101, 500, 1));
 
-            Thread.Sleep(50);
+            Thread.Sleep(DefaultDelayInMilliseconds);
 
             Assert.IsNotNull(receivedData);
             Assert.AreEqual(15, receivedData.InstrumentID);
