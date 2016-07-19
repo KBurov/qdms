@@ -11,82 +11,82 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Runtime.CompilerServices;
+
 using QDMS.Annotations;
 
 namespace QDMS
 {
     public class DataUpdateJobDetails : INotifyPropertyChanged
     {
+        private string _name;
+
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int ID { get; set; }
 
         /// <summary>
-        /// Name.
+        ///     Name.
         /// </summary>
         [MaxLength(255)]
         public string Name
         {
-            get
-            {
-                return _name;
-            }
+            get { return _name; }
             set
             {
                 _name = value;
+
                 OnPropertyChanged();
             }
         }
 
-        private string _name;
-
         /// <summary>
-        /// If true, all instruments with the given tag are matched. If false, a specific instrument is matched.
+        ///     If true, all instruments with the given tag are matched. If false, a specific instrument is matched.
         /// </summary>
         public bool UseTag { get; set; }
 
         /// <summary>
-        /// If UseTag = false, this instrument's data gets updated.
+        ///     If UseTag = false, this instrument's data gets updated.
         /// </summary>
         public int? InstrumentID { get; set; }
 
         /// <summary>
-        /// Instrument.
+        ///     Instrument.
         /// </summary>
         public virtual Instrument Instrument { get; set; }
 
         /// <summary>
-        /// If UseTag = true, instruments having this tag are updated.
+        ///     If UseTag = true, instruments having this tag are updated.
         /// </summary>
         public int? TagID { get; set; }
 
         /// <summary>
-        /// Tag.
+        ///     Tag.
         /// </summary>
         public virtual Tag Tag { get; set; }
 
         /// <summary>
-        /// If true, updates will only happen monday through friday.
+        ///     If true, updates will only happen monday through friday.
         /// </summary>
         public bool WeekDaysOnly { get; set; }
 
         /// <summary>
-        /// The time when the job runs.
+        ///     The time when the job runs.
         /// </summary>
         public TimeSpan Time { get; set; }
 
         /// <summary>
-        /// The data frequency to be updated.
+        ///     The data frequency to be updated.
         /// </summary>
         public BarSize Frequency { get; set; }
 
+        #region INotifyPropertyChanged implementation
         public event PropertyChangedEventHandler PropertyChanged;
+        #endregion
 
         [NotifyPropertyChangedInvocator]
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
-            PropertyChangedEventHandler handler = PropertyChanged;
-            if (handler != null) handler(this, new PropertyChangedEventArgs(propertyName));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
