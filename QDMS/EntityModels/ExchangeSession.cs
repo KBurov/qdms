@@ -7,6 +7,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -31,31 +32,11 @@ namespace QDMS
 
         [ProtoMember(3)]
         [NotMapped]
-        public double OpeningAsSeconds
-        {
-            get
-            {
-                return OpeningTime.TotalSeconds;
-            }
-            set
-            {
-                OpeningTime = TimeSpan.FromSeconds(value);
-            }
-        }
+        public double OpeningAsSeconds { get { return OpeningTime.TotalSeconds; } set { OpeningTime = TimeSpan.FromSeconds(value); } }
 
         [ProtoMember(4)]
         [NotMapped]
-        public double ClosingAsSeconds
-        {
-            get
-            {
-                return ClosingTime.TotalSeconds;
-            }
-            set
-            {
-                ClosingTime = TimeSpan.FromSeconds(value);
-            }
-        }
+        public double ClosingAsSeconds { get { return ClosingTime.TotalSeconds; } set { ClosingTime = TimeSpan.FromSeconds(value); } }
 
 
         [ProtoMember(5)]
@@ -67,11 +48,12 @@ namespace QDMS
         [ProtoMember(7)]
         public DayOfTheWeek ClosingDay { get; set; }
 
+        #region ICloneable implementation
         /// <summary>
-        /// Creates a new object that is a copy of the current instance.
+        ///     Creates a new object that is a copy of the current instance.
         /// </summary>
         /// <returns>
-        /// A new object that is a copy of this instance.
+        ///     A new object that is a copy of this instance.
         /// </returns>
         public object Clone()
         {
@@ -86,5 +68,6 @@ namespace QDMS
                 ClosingDay = ClosingDay
             };
         }
+        #endregion
     }
 }

@@ -12,7 +12,6 @@ using System.Linq;
 
 namespace QDMS
 {
-
     public class SessionTemplate : ICloneable
     {
         [Key]
@@ -24,15 +23,17 @@ namespace QDMS
 
         public virtual ICollection<TemplateSession> Sessions { get; set; }
 
+        #region ICloneable implementation
         /// <summary>
-        /// Creates a new object that is a copy of the current instance.
+        ///     Creates a new object that is a copy of the current instance.
         /// </summary>
         /// <returns>
-        /// A new object that is a copy of this instance.
+        ///     A new object that is a copy of this instance.
         /// </returns>
         public object Clone()
         {
-            return new SessionTemplate { ID = ID, Name = Name, Sessions = Sessions == null ? null : Sessions.Select(x => (TemplateSession)x.Clone()).ToList() };
+            return new SessionTemplate {ID = ID, Name = Name, Sessions = Sessions?.Select(x => (TemplateSession) x.Clone()).ToList()};
         }
+        #endregion
     }
 }

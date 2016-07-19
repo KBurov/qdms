@@ -106,7 +106,7 @@ namespace QDMS
         /// </returns>
         public object Clone()
         {
-            var clone = new ContinuousFuture
+            return new ContinuousFuture
             {
                 InstrumentID = InstrumentID,
                 Instrument = Instrument,
@@ -129,8 +129,6 @@ namespace QDMS
                 UseNov = UseNov,
                 UseDec = UseDec
             };
-
-            return clone;
         }
         #endregion
 

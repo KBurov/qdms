@@ -13,6 +13,7 @@ namespace QDMS
         int ID { get; set; }
 
         TimeSpan OpeningTime { get; set; }
+
         TimeSpan ClosingTime { get; set; }
 
         double OpeningAsSeconds { get; set; }

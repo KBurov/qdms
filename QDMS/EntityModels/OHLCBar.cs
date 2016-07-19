@@ -5,9 +5,10 @@
 // -----------------------------------------------------------------------
 
 using System;
-using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+
 using NodaTime;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -40,51 +41,32 @@ namespace QDMS
         public decimal? AdjClose { get; set; }
 
         [NotMapped]
-        public LocalDateTime Date
-        {
-            get
-            {
-                return new LocalDateTime(DT.Year, DT.Month, DT.Day, DT.Hour, DT.Minute, DT.Second, DT.Millisecond);
-            }
-        }
+        public LocalDateTime Date => new LocalDateTime(DT.Year, DT.Month, DT.Day, DT.Hour, DT.Minute, DT.Second, DT.Millisecond);
 
         [ProtoMember(9)]
         [NotMapped]
-        public long LongDate
-        {
-            get
-            {
-                return DT.Ticks;
-            }
-            set
-            {
-                DT = DateTime.FromBinary(value);
-            }
-        }
+        public long LongDate { get { return DT.Ticks; } set { DT = DateTime.FromBinary(value); } }
 
         [ProtoMember(91)]
         [NotMapped]
         public long? LongOpenDate
         {
-            get
-            {
-                return DTOpen.HasValue ? DTOpen.Value.Ticks : (long?)null;
-            }
+            get { return DTOpen?.Ticks; }
             set
             {
                 DTOpen = value.HasValue
                     ? DateTime.FromBinary(value.Value)
-                    : (DateTime?)null;
+                    : (DateTime?) null;
             }
         }
 
         /// <summary>
-        /// Date/Time of the bar open.
+        ///     Date/Time of the bar open.
         /// </summary>
         public DateTime? DTOpen { get; set; }
 
         /// <summary>
-        /// Date/Time of the bar close.
+        ///     Date/Time of the bar close.
         /// </summary>
         public DateTime DT { get; set; }
 
@@ -107,13 +89,7 @@ namespace QDMS
 
         public override string ToString()
         {
-            return string.Format("{0} - O: {1} H: {2} L: {3} C: {4} {5}",
-                DT.ToString("yyyy-MM-dd HH:mm:ss"),
-                Open,
-                High,
-                Low,
-                Close,
-                Dividend.HasValue ? "Div: " + Dividend.Value : "");
+            return $"{DT.ToString("yyyy-MM-dd HH:mm:ss")} - O: {Open} H: {High} L: {Low} C: {Close} {(Dividend.HasValue ? "Div: " + Dividend.Value : "")}";
         }
     }
 }

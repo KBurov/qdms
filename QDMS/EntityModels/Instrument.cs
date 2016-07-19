@@ -10,6 +10,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -53,20 +54,18 @@ namespace QDMS
             {
                 if (_expirationYear == 0 || _expirationMonth == 0 || _expirationDay == 0)
                     return null;
-                else
-                    return new DateTime(_expirationYear, _expirationMonth, _expirationDay);
+
+                return new DateTime(_expirationYear, _expirationMonth, _expirationDay);
             }
 
             set
             {
-                if (value.HasValue)
-                {
+                if (value.HasValue) {
                     _expirationYear = value.Value.Year;
                     _expirationMonth = value.Value.Month;
                     _expirationDay = value.Value.Day;
                 }
-                else
-                {
+                else {
                     _expirationYear = 0;
                     _expirationMonth = 0;
                     _expirationDay = 0;
@@ -74,26 +73,16 @@ namespace QDMS
             }
         }
 
-        [ProtoMember(7)]
-        [NotMapped]
-        [NonSerialized]
-        private int _expirationYear;
+        [ProtoMember(7)] [NotMapped] [NonSerialized] private int _expirationYear;
 
-        [ProtoMember(8)]
-        [NotMapped]
-        [NonSerialized]
-        private int _expirationMonth;
+        [ProtoMember(8)] [NotMapped] [NonSerialized] private int _expirationMonth;
 
-        [ProtoMember(9)]
-        [NotMapped]
-        [NonSerialized]
-        private int _expirationDay;
+        [ProtoMember(9)] [NotMapped] [NonSerialized] private int _expirationDay;
 
         [ProtoMember(10)]
         public OptionType? OptionType { get; set; }
 
         [ProtoMember(11)]
-        
         public decimal? Strike { get; set; }
 
         [ProtoMember(12)]
@@ -155,70 +144,14 @@ namespace QDMS
         public ContinuousFuture ContinuousFuture { get; set; }
 
         [NotMapped]
-        public string TagsAsString
-        {
-            get
-            {
-                return (Tags == null || Tags.Count == 0) ? "" : string.Join(", ", Tags.Select(x => x.Name));
-            }
-        }
+        public string TagsAsString { get { return Tags == null || Tags.Count == 0 ? string.Empty : string.Join(", ", Tags.Select(x => x.Name)); } }
 
+        #region ICloneable implementation
         /// <summary>
-        /// Get timezone info for this instrument.
-        /// </summary>
-        /// <returns>Returns TimeZoneInfo for this instrument's exchange's timezone. If it's null, it returns UTC.</returns>
-        public TimeZoneInfo GetTZInfo()
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(
-                Exchange == null || string.IsNullOrEmpty(Exchange.Timezone)
-                    ? "UTC" 
-                    : Exchange.Timezone);
-        }
-
-        public override string ToString()
-        {
-            var sb = new StringBuilder();
-
-            sb.Append("ID: " + ID);
-
-            if (!string.IsNullOrEmpty(Symbol))
-                sb.Append(" Symbol: " + Symbol);
-
-            if (!string.IsNullOrEmpty(UnderlyingSymbol))
-                sb.Append(" Underlying: " + UnderlyingSymbol);
-
-            sb.Append(" Type: " + Type);
-
-            if (OptionType.HasValue)
-                sb.Append(string.Format(" ({0})", OptionType));
-
-            if (Strike.HasValue && Strike != 0)
-                sb.Append(" Strike: " + Strike);
-
-            if (Expiration.HasValue)
-                sb.Append(" Exp: " + Expiration.Value.ToString("dd-MM-yyyy"));
-
-            if (IsContinuousFuture)
-                sb.Append(" (CF)");
-
-            if (Exchange != null)
-                sb.Append(" Exch: " + Exchange.Name);
-
-            if (Datasource != null)
-                sb.Append(" DS: " + Datasource.Name);
-
-
-            if(!string.IsNullOrEmpty(Currency))
-                sb.Append(string.Format("({0})", Currency));
-
-            return sb.ToString().Trim();
-        }
-
-        /// <summary>
-        /// Creates a new object that is a copy of the current instance.
+        ///     Creates a new object that is a copy of the current instance.
         /// </summary>
         /// <returns>
-        /// A new object that is a copy of this instance.
+        ///     A new object that is a copy of this instance.
         /// </returns>
         public object Clone()
         {
@@ -246,18 +179,67 @@ namespace QDMS
                 Exchange = Exchange,
                 PrimaryExchange = PrimaryExchange,
                 Datasource = Datasource,
-                Tags = Tags == null ? null : Tags.ToList(),
-                Sessions = Sessions == null ? null : Sessions.Select(x => (InstrumentSession)x.Clone()).ToList(),
+                Tags = Tags?.ToList(),
+                Sessions = Sessions?.Select(x => (InstrumentSession) x.Clone()).ToList(),
                 SessionsSource = SessionsSource,
                 SessionTemplateID = SessionTemplateID,
-                DatasourceSymbol = DatasourceSymbol
+                DatasourceSymbol = DatasourceSymbol,
+                ContinuousFuture = (ContinuousFuture) ContinuousFuture?.Clone()
             };
 
-            if (ContinuousFuture != null)
-            {
-                clone.ContinuousFuture = (ContinuousFuture)ContinuousFuture.Clone();
-            }
             return clone;
+        }
+        #endregion
+
+        /// <summary>
+        ///     Get timezone info for this instrument.
+        /// </summary>
+        /// <returns>Returns TimeZoneInfo for this instrument's exchange's timezone. If it's null, it returns UTC.</returns>
+        public TimeZoneInfo GetTZInfo()
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(
+                string.IsNullOrEmpty(Exchange?.Timezone)
+                    ? "UTC"
+                    : Exchange.Timezone);
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            sb.Append("ID: " + ID);
+
+            if (!string.IsNullOrEmpty(Symbol))
+                sb.Append(" Symbol: " + Symbol);
+
+            if (!string.IsNullOrEmpty(UnderlyingSymbol))
+                sb.Append(" Underlying: " + UnderlyingSymbol);
+
+            sb.Append(" Type: " + Type);
+
+            if (OptionType.HasValue)
+                sb.Append($" ({OptionType})");
+
+            if (Strike.HasValue && Strike != 0)
+                sb.Append(" Strike: " + Strike);
+
+            if (Expiration.HasValue)
+                sb.Append(" Exp: " + Expiration.Value.ToString("dd-MM-yyyy"));
+
+            if (IsContinuousFuture)
+                sb.Append(" (CF)");
+
+            if (Exchange != null)
+                sb.Append(" Exch: " + Exchange.Name);
+
+            if (Datasource != null)
+                sb.Append(" DS: " + Datasource.Name);
+
+
+            if (!string.IsNullOrEmpty(Currency))
+                sb.Append($"({Currency})");
+
+            return sb.ToString().Trim();
         }
     }
 }

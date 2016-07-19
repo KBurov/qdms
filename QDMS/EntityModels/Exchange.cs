@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -37,30 +38,29 @@ namespace QDMS
         [MaxLength(255)]
         public string LongName { get; set; }
 
+        #region ICloneable implementation
         /// <summary>
-        /// Creates a new object that is a copy of the current instance.
+        ///     Creates a new object that is a copy of the current instance.
         /// </summary>
         /// <returns>
-        /// A new object that is a copy of this instance.
+        ///     A new object that is a copy of this instance.
         /// </returns>
         public object Clone()
         {
-            var clone = new Exchange();
-            clone.ID = ID;
-            clone.Name = Name;
-            clone.Timezone = Timezone;
-            clone.Sessions = Sessions == null ? null : new List<ExchangeSession>(Sessions.Select(x => (ExchangeSession)x.Clone()));
-            clone.LongName = LongName;
-            return clone;
+            return new Exchange
+            {
+                ID = ID,
+                Name = Name,
+                Timezone = Timezone,
+                Sessions = Sessions == null ? null : new List<ExchangeSession>(Sessions.Select(x => (ExchangeSession) x.Clone())),
+                LongName = LongName
+            };
         }
+        #endregion
 
         public override string ToString()
         {
-            return string.Format("{0} {1} ({2}) TZ: {3}",
-                ID,
-                Name,
-                LongName,
-                Timezone);
+            return $"{ID} {Name} ({LongName}) TZ: {Timezone}";
         }
     }
 }
