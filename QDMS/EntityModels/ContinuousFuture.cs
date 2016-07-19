@@ -7,6 +7,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -15,24 +16,6 @@ namespace QDMS
     [Serializable]
     public class ContinuousFuture : ICloneable
     {
-        public ContinuousFuture()
-        {
-            UseJan = true;
-            UseFeb = true;
-            UseMar = true;
-            UseApr = true;
-            UseMay = true;
-            UseJun = true;
-            UseJul = true;
-            UseAug = true;
-            UseSep = true;
-            UseOct = true;
-            UseNov = true;
-            UseDec = true;
-
-            Month = 1;
-        }
-
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         [ProtoMember(1)]
@@ -48,32 +31,32 @@ namespace QDMS
         public int UnderlyingSymbolID { get; set; }
 
         /// <summary>
-        /// The underlying symbol that the continuous future is based on.
+        ///     The underlying symbol that the continuous future is based on.
         /// </summary>
         [ProtoMember(20)]
         public virtual UnderlyingSymbol UnderlyingSymbol { get; set; }
 
         /// <summary>
-        /// Which contract month to use to construct the continuous prices.
-        /// For example, Month = 1 uses the "front" future, Month = 2 uses the next one and so forth.
+        ///     Which contract month to use to construct the continuous prices.
+        ///     For example, Month = 1 uses the "front" future, Month = 2 uses the next one and so forth.
         /// </summary>
         [ProtoMember(4)]
         public int Month { get; set; }
 
         /// <summary>
-        /// What criteria should be used when determining whether to roll over to the next contract.
+        ///     What criteria should be used when determining whether to roll over to the next contract.
         /// </summary>
         [ProtoMember(5)]
         public ContinuousFuturesRolloverType RolloverType { get; set; }
 
         /// <summary>
-        /// Number of days that the criteria will use to determine rollover.
+        ///     Number of days that the criteria will use to determine rollover.
         /// </summary>
         [ProtoMember(6)]
         public int RolloverDays { get; set; }
 
         /// <summary>
-        /// How to adjust prices from one contract to the next
+        ///     How to adjust prices from one contract to the next
         /// </summary>
         [ProtoMember(7)]
         public ContinuousFuturesAdjustmentMode AdjustmentMode { get; set; }
@@ -114,44 +97,12 @@ namespace QDMS
         [ProtoMember(19)]
         public bool UseDec { get; set; }
 
-        public bool MonthIsUsed(int month)
-        {
-            switch (month)
-            {
-                case 1:
-                    return UseJan;
-                case 2:
-                    return UseFeb;
-                case 3:
-                    return UseMar;
-                case 4:
-                    return UseApr;
-                case 5:
-                    return UseMay;
-                case 6:
-                    return UseJun;
-                case 7:
-                    return UseJul;
-                case 8:
-                    return UseAug;
-                case 9:
-                    return UseSep;
-                case 10:
-                    return UseOct;
-                case 11:
-                    return UseNov;
-                case 12:
-                    return UseDec;
-                default:
-                    return false;
-            }
-        }
-
+        #region ICloneable implementation
         /// <summary>
-        /// Creates a new object that is a copy of the current instance.
+        ///     Creates a new object that is a copy of the current instance.
         /// </summary>
         /// <returns>
-        /// A new object that is a copy of this instance.
+        ///     A new object that is a copy of this instance.
         /// </returns>
         public object Clone()
         {
@@ -180,6 +131,57 @@ namespace QDMS
             };
 
             return clone;
+        }
+        #endregion
+
+        public ContinuousFuture()
+        {
+            UseJan = true;
+            UseFeb = true;
+            UseMar = true;
+            UseApr = true;
+            UseMay = true;
+            UseJun = true;
+            UseJul = true;
+            UseAug = true;
+            UseSep = true;
+            UseOct = true;
+            UseNov = true;
+            UseDec = true;
+
+            Month = 1;
+        }
+
+        public bool MonthIsUsed(int month)
+        {
+            switch (month) {
+                case 1:
+                    return UseJan;
+                case 2:
+                    return UseFeb;
+                case 3:
+                    return UseMar;
+                case 4:
+                    return UseApr;
+                case 5:
+                    return UseMay;
+                case 6:
+                    return UseJun;
+                case 7:
+                    return UseJul;
+                case 8:
+                    return UseAug;
+                case 9:
+                    return UseSep;
+                case 10:
+                    return UseOct;
+                case 11:
+                    return UseNov;
+                case 12:
+                    return UseDec;
+                default:
+                    return false;
+            }
         }
     }
 }
