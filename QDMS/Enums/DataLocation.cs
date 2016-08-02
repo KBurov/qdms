@@ -10,26 +10,23 @@ using System.ComponentModel;
 namespace QDMS
 {
     /// <summary>
-    /// Used to set where the historical data will be sourced from.
+    ///     Used to set where the historical data will be sourced from.
     /// </summary>
     [Serializable]
-    public enum DataLocation : int
+    public enum DataLocation
     {
         /// <summary>
-        /// Both external and local data may be returned.
+        ///     Both external and local data may be returned.
         /// </summary>
-        [Description("Both")]
-        Both = 0,
+        [Description("Both")] Both = 0,
         /// <summary>
-        /// Forces a fresh download from the external data source.
+        ///     Forces a fresh download from the external data source.
         /// </summary>
-        [Description("External Only")]
-        ExternalOnly = 1,
+        [Description("External Only")] ExternalOnly = 1,
         /// <summary>
-        /// Only data from the local database will be returned. 
-        /// External datasource will be bypassed.
+        ///     Only data from the local database will be returned.
+        ///     External datasource will be bypassed.
         /// </summary>
-        [Description("Local Only")]
-        LocalOnly = 2
+        [Description("Local Only")] LocalOnly = 2
     }
 }

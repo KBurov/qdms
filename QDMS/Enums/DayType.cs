@@ -10,17 +10,16 @@ using System.ComponentModel;
 namespace QDMS
 {
     [Serializable]
-    public enum DayType : int
+    public enum DayType
     {
         /// <summary>
-        /// Calendar Day
+        ///     Calendar Day
         /// </summary>
-        [Description("Calendar Day")]
-        Calendar = 0,
+        [Description("Calendar Day")] Calendar = 0,
+
         /// <summary>
-        /// Business Day
+        ///     Business Day
         /// </summary>
-        [Description("Business Day")]
-        Business = 1,
+        [Description("Business Day")] Business = 1
     }
 }

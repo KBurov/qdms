@@ -11,11 +11,6 @@ namespace QDMS
 {
     public interface IDataClient : IDisposable
     {
-        event EventHandler<RealTimeDataEventArgs> RealTimeDataReceived;
-        event EventHandler<HistoricalDataEventArgs> HistoricalDataReceived;
-        event EventHandler<LocallyAvailableDataInfoReceivedEventArgs> LocallyAvailableDataInfoReceived;
-        event EventHandler<ErrorArgs> Error;
-
         bool Connected { get; }
 
         /// <summary>
@@ -70,5 +65,13 @@ namespace QDMS
         /// </summary>
         /// <returns></returns>
         List<Instrument> GetAllInstruments();
+
+        event EventHandler<RealTimeDataEventArgs> RealTimeDataReceived;
+
+        event EventHandler<HistoricalDataEventArgs> HistoricalDataReceived;
+
+        event EventHandler<LocallyAvailableDataInfoReceivedEventArgs> LocallyAvailableDataInfoReceived;
+
+        event EventHandler<ErrorArgs> Error;
     }
 }

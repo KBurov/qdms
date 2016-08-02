@@ -11,11 +11,12 @@ namespace QDMS
     public interface IContinuousFuturesBroker : IHistoricalDataSource, IDisposable
     {
         /// <summary>
-        /// Finds the currently active futures contract for a continuous futures instrument.
-        /// The contract is returned asynchronously through the FoundFrontContract event.
+        ///     Finds the currently active futures contract for a continuous futures instrument.
+        ///     The contract is returned asynchronously through the FoundFrontContract event.
         /// </summary>
         /// <returns>Returns an ID uniquely identifying this request.</returns>
         int RequestFrontContract(Instrument cfInstrument, DateTime? date = null);
+
         event EventHandler<FoundFrontContractEventArgs> FoundFrontContract;
     }
 }

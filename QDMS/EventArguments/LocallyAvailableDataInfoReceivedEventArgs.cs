@@ -12,17 +12,17 @@ namespace QDMS
     public class LocallyAvailableDataInfoReceivedEventArgs : EventArgs
     {
         /// <summary>
-        /// The instrument the request is for.
+        ///     The instrument the request is for.
         /// </summary>
         public Instrument Instrument { get; set; }
 
         /// <summary>
-        /// List of StoredDataInfo objects, containing available frequencies and covered dates.
+        ///     List of StoredDataInfo objects, containing available frequencies and covered dates.
         /// </summary>
         public List<StoredDataInfo> StorageInfo { get; set; }
 
         /// <summary>
-        /// Event args for locally stored data info requests.
+        ///     Event args for locally stored data info requests.
         /// </summary>
         public LocallyAvailableDataInfoReceivedEventArgs(Instrument instrument, List<StoredDataInfo> storageInfo)
         {

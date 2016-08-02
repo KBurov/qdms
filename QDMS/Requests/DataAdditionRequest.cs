@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 
 using System.Collections.Generic;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -25,7 +26,7 @@ namespace QDMS
         public bool Overwrite { get; set; }
 
         /// <summary>
-        /// If set to true, all adjusted values will be re-calculated
+        ///     If set to true, all adjusted values will be re-calculated
         /// </summary>
         public bool AdjustData { get; set; }
 
@@ -45,12 +46,7 @@ namespace QDMS
 
         public override string ToString()
         {
-            return (string.Format("{0} bars @ {1}, instrument: {2}. {3} {4}",
-                Data.Count,
-                Frequency,
-                Instrument,
-                Overwrite ? "Overwrite" : "",
-                AdjustData ? "Adjust" : ""));
+            return $"{Data.Count} bars @ {Frequency}, instrument: {Instrument}. {(Overwrite ? "Overwrite" : "")} {(AdjustData ? "Adjust" : "")}";
         }
     }
 }

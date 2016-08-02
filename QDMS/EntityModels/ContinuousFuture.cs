@@ -26,7 +26,6 @@ namespace QDMS
 
         public virtual Instrument Instrument { get; set; }
 
-
         [ProtoMember(3)]
         public int UnderlyingSymbolID { get; set; }
 

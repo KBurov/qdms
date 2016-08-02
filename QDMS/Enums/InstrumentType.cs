@@ -10,82 +10,66 @@ using System.ComponentModel;
 namespace QDMS
 {
     /// <summary>
-    /// Order type.
+    ///     Order type.
     /// </summary>
     [Serializable]
-    public enum InstrumentType : int
+    public enum InstrumentType
     {
         /// <summary>
-        /// Stock
+        ///     Stock
         /// </summary>
-        [Description("STK")]
-        Stock = 0,
+        [Description("STK")] Stock = 0,
         /// <summary>
-        /// Option
+        ///     Option
         /// </summary>
-        [Description("OPT")]
-        Option = 1,
+        [Description("OPT")] Option = 1,
         /// <summary>
-        /// Future
+        ///     Future
         /// </summary>
-        [Description("FUT")]
-        Future = 2,
+        [Description("FUT")] Future = 2,
         /// <summary>
-        /// Indice
+        ///     Indice
         /// </summary>
-        [Description("IND")]
-        Index = 3,
+        [Description("IND")] Index = 3,
         /// <summary>
-        /// FOP = options on futures
+        ///     FOP = options on futures
         /// </summary>
-        [Description("FOP")]
-        FutureOption = 4,
+        [Description("FOP")] FutureOption = 4,
         /// <summary>
-        /// Cash
+        ///     Cash
         /// </summary>
-        [Description("CASH")]
-        Cash = 5,
+        [Description("CASH")] Cash = 5,
         /// <summary>
-        /// For Combination Orders - must use combo leg details
+        ///     For Combination Orders - must use combo leg details
         /// </summary>
-        [Description("BAG")]
-        Bag = 6,
+        [Description("BAG")] Bag = 6,
         /// <summary>
-        /// Bond
+        ///     Bond
         /// </summary>
-        [Description("BOND")]
-        Bond = 7,
+        [Description("BOND")] Bond = 7,
         /// <summary>
-        /// Warrant
+        ///     Warrant
         /// </summary>
-        [Description("WAR")]
-        Warrant = 8,
+        [Description("WAR")] Warrant = 8,
         /// <summary>
-        /// Commodity
+        ///     Commodity
         /// </summary>
-        [Description("CMDTY")]
-        Commodity = 9,
+        [Description("CMDTY")] Commodity = 9,
         /// <summary>
-        /// Bill
+        ///     Bill
         /// </summary>
-        [Description("BILL")]
-        Bill = 10,
+        [Description("BILL")] Bill = 10,
         /// <summary>
-        /// CFD
+        ///     CFD
         /// </summary>
-        [Description("CFD")]
-        CFD = 11,
+        [Description("CFD")] CFD = 11,
         /// <summary>
-        /// Undefined Security Type
+        ///     Undefined Security Type
         /// </summary>
-        [Description("")]
-        Undefined = 12,
+        [Description("")] Undefined = 12,
         /// <summary>
-        /// Backtest result
+        ///     Backtest result
         /// </summary>
-        [Description("Backtest")]
-        Backtest = 13
+        [Description("Backtest")] Backtest = 13
     }
-
 }
-

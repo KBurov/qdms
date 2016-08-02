@@ -12,22 +12,22 @@ namespace QDMS
     public interface IHistoricalDataSource : INotifyPropertyChanged
     {
         /// <summary>
-        /// Connect to the data source.
+        ///     Connect to the data source.
         /// </summary>
         void Connect();
 
         /// <summary>
-        /// Disconnect from the data source.
+        ///     Disconnect from the data source.
         /// </summary>
         void Disconnect();
 
         /// <summary>
-        /// Whether the connection to the data source is up or not.
+        ///     Whether the connection to the data source is up or not.
         /// </summary>
         bool Connected { get; }
 
         /// <summary>
-        /// The name of the data source.
+        ///     The name of the data source.
         /// </summary>
         string Name { get; }
 
@@ -37,12 +37,12 @@ namespace QDMS
         event EventHandler<HistoricalDataEventArgs> HistoricalDataArrived;
 
         /// <summary>
-        /// Fires on any error.
+        ///     Fires on any error.
         /// </summary>
         event EventHandler<ErrorArgs> Error;
 
         /// <summary>
-        /// Fires on disconnection from the data source.
+        ///     Fires on disconnection from the data source.
         /// </summary>
         event EventHandler<DataSourceDisconnectEventArgs> Disconnected;
     }

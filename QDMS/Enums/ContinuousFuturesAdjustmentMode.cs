@@ -13,19 +13,16 @@ namespace QDMS
     public enum ContinuousFuturesAdjustmentMode
     {
         /// <summary>
-        /// No Adjustment
+        ///     No Adjustment
         /// </summary>
-        [Description("No Adjustment")]
-        NoAdjustment = 0,
+        [Description("No Adjustment")] NoAdjustment = 0,
         /// <summary>
-        /// Ratio
+        ///     Ratio
         /// </summary>
-        [Description("Ratio")]
-        Ratio = 1,
+        [Description("Ratio")] Ratio = 1,
         /// <summary>
-        /// Difference
+        ///     Difference
         /// </summary>
-        [Description("Difference")]
-        Difference = 2
+        [Description("Difference")] Difference = 2
     }
 }

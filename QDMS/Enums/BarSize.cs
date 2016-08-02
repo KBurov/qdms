@@ -10,94 +10,78 @@ using System.ComponentModel;
 namespace QDMS
 {
     /// <summary>
-    /// Historical Bar Size Requests
+    ///     Historical Bar Size Requests.
     /// </summary>
     [Serializable]
-   // [DataContract]
+    // [DataContract]
     //[ProtoContract]
-    public enum BarSize : int
+    public enum BarSize
     {
         /// <summary>
-        /// Tick bars
+        ///     Tick bars
         /// </summary>
         //[ProtoEnum(Name="Tick", Value=0)]
         //[EnumMember]
-        [Description("Tick")]
-        Tick = 0,
+        [Description("Tick")] Tick = 0,
         /// <summary>
-        /// 1 second bars
+        ///     1 second bars
         /// </summary>
-        [Description("1 secs")]
-        OneSecond = 1,
+        [Description("1 secs")] OneSecond = 1,
         /// <summary>
-        /// 5 second bars
+        ///     5 second bars
         /// </summary>
-        [Description("5 secs")]
-        FiveSeconds = 2,
+        [Description("5 secs")] FiveSeconds = 2,
         /// <summary>
-        /// 15 second bars
+        ///     15 second bars
         /// </summary>
-        [Description("15 secs")]
-        FifteenSeconds = 3,
+        [Description("15 secs")] FifteenSeconds = 3,
         /// <summary>
-        /// 30 second bars
+        ///     30 second bars
         /// </summary>
-        [Description("30 secs")]
-        ThirtySeconds = 4,
+        [Description("30 secs")] ThirtySeconds = 4,
         /// <summary>
-        /// 1 minute bars
+        ///     1 minute bars
         /// </summary>
-        [Description("1 min")]
-        OneMinute = 5,
+        [Description("1 min")] OneMinute = 5,
         /// <summary>
-        /// 2 minute bars
+        ///     2 minute bars
         /// </summary>
-        [Description("2 mins")]
-        TwoMinutes = 6,
+        [Description("2 mins")] TwoMinutes = 6,
         /// <summary>
-        /// 5 minute bars
+        ///     5 minute bars
         /// </summary>
-        [Description("5 mins")]
-        FiveMinutes = 7,
+        [Description("5 mins")] FiveMinutes = 7,
         /// <summary>
-        /// 15 minute bars
+        ///     15 minute bars
         /// </summary>
-        [Description("15 mins")]
-        FifteenMinutes = 8,
+        [Description("15 mins")] FifteenMinutes = 8,
         /// <summary>
-        /// 30 minute bars
+        ///     30 minute bars
         /// </summary>
-        [Description("30 mins")]
-        ThirtyMinutes = 9,
+        [Description("30 mins")] ThirtyMinutes = 9,
         /// <summary>
-        /// 1 hour bars
+        ///     1 hour bars
         /// </summary>
-        [Description("1 hour")]
-        OneHour = 10,
+        [Description("1 hour")] OneHour = 10,
         /// <summary>
-        /// 1 day bars
+        ///     1 day bars
         /// </summary>
-        [Description("1 day")]
-        OneDay = 11,
+        [Description("1 day")] OneDay = 11,
         /// <summary>
-        /// 1 week bars
+        ///     1 week bars
         /// </summary>
-        [Description("1 week")]
-        OneWeek = 12,
+        [Description("1 week")] OneWeek = 12,
         /// <summary>
-        /// 1 month bars
+        ///     1 month bars
         /// </summary>
-        [Description("1 month")]
-        OneMonth = 13,
+        [Description("1 month")] OneMonth = 13,
         /// <summary>
-        /// 1 quarter bars
+        ///     1 quarter bars
         /// </summary>
-        [Description("1 quarter")]
-        OneQuarter = 14,
+        [Description("1 quarter")] OneQuarter = 14,
         /// <summary>
-        /// 1 year bars
+        ///     1 year bars
         /// </summary>
-        [Description("1 year")]
-        OneYear = 15
+        [Description("1 year")] OneYear = 15
     }
 }

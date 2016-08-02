@@ -8,30 +8,30 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+
 using ProtoBuf;
+
 using QLNet;
 
 namespace QDMS
 {
     public static class MyUtils
     {
-        private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private static readonly DateTime _epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         /// <summary>
-        /// Returns a string with the ordinal suffix of a number, i.e. 1 -> "1st"
+        ///     Returns a string with the ordinal suffix of a number, i.e. 1 -> "1st"
         /// </summary>
         public static string Ordinal(int num)
         {
-            switch (num % 100)
-            {
+            switch (num % 100) {
                 case 11:
                 case 12:
                 case 13:
                     return num + "th";
             }
 
-            switch (num % 10)
-            {
+            switch (num % 10) {
                 case 1:
                     return num + "st";
 
@@ -47,18 +47,17 @@ namespace QDMS
         }
 
         /// <summary>
-        /// Given the root symbol, year, and month, returns a string of the future contract symbol
-        /// based on the US letter-based month system.
+        ///     Given the root symbol, year, and month, returns a string of the future contract symbol
+        ///     based on the US letter-based month system.
         /// </summary>
         public static string GetFuturesContractSymbol(string baseSymbol, int month, int year)
         {
-            return string.Format("{0}{1}{2}", baseSymbol, GetFuturesMonthSymbol(month), year % 10);
+            return $"{baseSymbol}{GetFuturesMonthSymbol(month)}{year % 10}";
         }
 
         private static string GetFuturesMonthSymbol(int month)
         {
-            switch (month)
-            {
+            switch (month) {
                 case 1:
                     return "F";
 
@@ -95,16 +94,15 @@ namespace QDMS
                 case 12:
                     return "Z";
             }
-            throw new ArgumentOutOfRangeException("month", "Month must be between 1-12");
+            throw new ArgumentOutOfRangeException(nameof(month), "Month must be between 1-12");
         }
 
         /// <summary>
-        /// Gets a calendar from a 2-letter country code.
+        ///     Gets a calendar from a 2-letter country code.
         /// </summary>
         public static Calendar GetCalendarFromCountryCode(string country)
         {
-            switch (country)
-            {
+            switch (country) {
                 case "CH":
                     return new Switzerland();
 
@@ -155,32 +153,34 @@ namespace QDMS
 
                 case "SE":
                     return new Sweden();
-            }
 
-            return new UnitedStates();
+                default:
+                    return new UnitedStates();
+            }
         }
 
         /// <summary>
-        /// Converts a datetime to a UNIX epoch-based timestamp.
+        ///     Converts a datetime to a UNIX epoch-based timestamp.
         /// </summary>
         public static long ConvertToTimestamp(DateTime value)
         {
-            TimeSpan elapsedTime = value - Epoch;
-            return (long)elapsedTime.TotalSeconds;
+            var elapsedTime = value - _epoch;
+
+            return (long) elapsedTime.TotalSeconds;
         }
 
         public static DateTime TimestampToDateTime(long timestamp)
         {
-            return Epoch.AddSeconds(timestamp);
+            return _epoch.AddSeconds(timestamp);
         }
 
         public static DateTime TimestampToDateTimeByMillisecound(long timestamp)
         {
-            return Epoch.AddMilliseconds(timestamp);
+            return _epoch.AddMilliseconds(timestamp);
         }
 
         /// <summary>
-        /// Returns an IEnumerable of all possible values of an Enum.
+        ///     Returns an IEnumerable of all possible values of an Enum.
         /// </summary>
         public static IEnumerable<T> GetEnumValues<T>()
         {
@@ -188,20 +188,21 @@ namespace QDMS
         }
 
         /// <summary>
-        /// Serialize object using protocol buffers.
+        ///     Serialize object using protocol buffers.
         /// </summary>
         public static byte[] ProtoBufSerialize(object input, MemoryStream ms)
         {
+            // TODO: Think to move memory stream creation inside method
             ms.SetLength(0);
             Serializer.Serialize(ms, input);
             ms.Position = 0;
-            byte[] buffer = new byte[ms.Length];
-            ms.Read(buffer, 0, (int)ms.Length);
+            var buffer = new byte[ms.Length];
+            ms.Read(buffer, 0, (int) ms.Length);
             return buffer;
         }
 
         /// <summary>
-        /// Deserialize object of type T using protocol buffers.
+        ///     Deserialize object of type T using protocol buffers.
         /// </summary>
         public static T ProtoBufDeserialize<T>(byte[] input, MemoryStream ms)
         {
@@ -213,12 +214,11 @@ namespace QDMS
         }
 
         /// <summary>
-        /// Converts a BarSize to its corresponding timespan.
+        ///     Converts a BarSize to its corresponding timespan.
         /// </summary>
         public static TimeSpan ToTimeSpan(this BarSize size)
         {
-            switch (size)
-            {
+            switch (size) {
                 case BarSize.Tick:
                     return TimeSpan.FromTicks(1);
 
@@ -270,7 +270,7 @@ namespace QDMS
         }
 
         /// <summary>
-        /// Converts a timespan to its corresponding BarSize, if possible.
+        ///     Converts a timespan to its corresponding BarSize, if possible.
         /// </summary>
         public static BarSize ToBarSize(this TimeSpan span)
         {
@@ -306,7 +306,7 @@ namespace QDMS
 
             if (span <= TimeSpan.FromHours(1))
                 return BarSize.OneHour;
-            
+
             if (span <= TimeSpan.FromDays(1))
                 return BarSize.OneDay;
 
@@ -323,17 +323,24 @@ namespace QDMS
         }
 
         /// <summary>
-        /// Returns the unmber of business days between two dates, not including the final day.
+        ///     Returns the unmber of business days between two dates, not including the final day.
         /// </summary>
         public static int BusinessDaysBetween(DateTime start, DateTime end, Calendar cal)
         {
-            if (start > end) throw new Exception("Ending date must be later than starting date");
-            if (start == end) return 0;
-            int count = 0;
-            while (start < end)
-            {
-                if (cal.isBusinessDay(start))
+            if (start > end) {
+                throw new Exception("Ending date must be later than starting date");
+            }
+            if (start == end) {
+                return 0;
+            }
+
+            var count = 0;
+
+            while (start < end) {
+                if (cal.isBusinessDay(start)) {
                     count++;
+                }
+
                 start = start.AddDays(1);
             }
 
@@ -341,67 +348,59 @@ namespace QDMS
         }
 
         /// <summary>
-        /// Sets bar open and closing times to the opening and closing of the day's sessions
+        ///     Sets bar open and closing times to the opening and closing of the day's sessions
         /// </summary>
         /// <param name="bars"></param>
         /// <param name="instrument"></param>
         public static void SetSessionTimes(IEnumerable<OHLCBar> bars, Instrument instrument)
         {
-            Dictionary<int, InstrumentSession> openingSessions = instrument.SessionStartTimesByDay();
-            Dictionary<int, TimeSpan> closingSessions = instrument.SessionEndTimesByDay();
+            var openingSessions = instrument.SessionStartTimesByDay();
+            var closingSessions = instrument.SessionEndTimesByDay();
 
-            foreach (OHLCBar bar in bars)
-            {
-                int dotw = bar.DT.DayOfWeek.ToInt();
-
+            foreach (var bar in bars) {
+                var dotw = bar.DT.DayOfWeek.ToInt();
                 //set opening time
-                if (openingSessions.ContainsKey(dotw))
-                {
-                    if ((int)openingSessions[dotw].OpeningDay != dotw)
-                    {
+                if (openingSessions.ContainsKey(dotw)) {
+                    if ((int) openingSessions[dotw].OpeningDay != dotw) {
                         //the opening is on a different day, move back
-                        int daysToMoveBack =
-                            (int)openingSessions[dotw].OpeningDay <= dotw
-                            ? dotw - (int)openingSessions[dotw].OpeningDay
-                            : 7 - ((int)openingSessions[dotw].OpeningDay - dotw);
+                        var daysToMoveBack =
+                            (int) openingSessions[dotw].OpeningDay <= dotw
+                                ? dotw - (int) openingSessions[dotw].OpeningDay
+                                : 7 - ((int) openingSessions[dotw].OpeningDay - dotw);
                         bar.DTOpen = new DateTime(bar.DT.Year, bar.DT.Month, bar.DT.Day).AddDays(-daysToMoveBack) + openingSessions[dotw].OpeningTime;
                         //TODO write a test for this stuff
                     }
-                    else
-                    {
+                    else {
                         bar.DTOpen = new DateTime(bar.DT.Year, bar.DT.Month, bar.DT.Day) + openingSessions[dotw].OpeningTime;
                     }
                 }
-                else
-                {
+                else {
                     bar.DTOpen = new DateTime(bar.DT.Year, bar.DT.Month, bar.DT.Day, 0, 0, 0);
                 }
-
                 //set closing time
-                if (closingSessions.ContainsKey(dotw))
-                {
+                if (closingSessions.ContainsKey(dotw)) {
                     bar.DT = new DateTime(bar.DT.Year, bar.DT.Month, bar.DT.Day) + closingSessions[dotw];
                 }
-                else
-                {
+                else {
                     bar.DT = new DateTime(bar.DT.Year, bar.DT.Month, bar.DT.Day, 23, 59, 59);
                 }
             }
         }
 
         /// <summary>
-        /// Ensure that no sessions in the collection overlap.
+        ///     Ensure that no sessions in the collection overlap.
         /// </summary>
         public static void ValidateSessions(List<ISession> sessions)
         {
             sessions = sessions.OrderBy(x => x.ClosingDay).ThenBy(x => x.ClosingTime).ToList();
             //first test last vs first, then in a row
-            if (sessions.First().Overlaps(sessions.Last()))
-                throw new Exception(string.Format("Sessions overlap: {0} and {1}", sessions.First(), sessions.Last()));
-            for (int i = 0; i < sessions.Count - 1; i++)
-            {
-                if (sessions[i].Overlaps(sessions[i + 1]))
-                    throw new Exception(string.Format("Sessions overlap: {0} and {1}", sessions.First(), sessions.Last()));
+            if (sessions.First().Overlaps(sessions.Last())) {
+                throw new Exception($"Sessions overlap: {sessions.First()} and {sessions.Last()}");
+            }
+            for (var i = 0;i < sessions.Count - 1;i++) {
+                if (sessions[i].Overlaps(sessions[i + 1])) {
+                    throw new Exception($"Sessions overlap: {sessions.First()} and {sessions.Last()}");
+                }
             }
         }
     }

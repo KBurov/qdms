@@ -11,7 +11,9 @@ namespace QDMS
     public class FrontContractRequest
     {
         public int ID { get; set; }
+
         public Instrument Instrument { get; set; }
+
         public DateTime? Date { get; set; }
     }
 }

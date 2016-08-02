@@ -11,7 +11,7 @@ namespace QDMS
     public static class DecimalExtensions
     {
         /// <summary>
-        /// Returns the number of decimal places, ignoring trailing zeros.
+        ///     Returns the number of decimal places, ignoring trailing zeros.
         /// </summary>
         public static int CountDecimalPlaces(this decimal value)
         {

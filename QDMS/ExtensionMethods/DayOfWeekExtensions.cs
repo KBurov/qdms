@@ -11,12 +11,11 @@ namespace QDMS
     public static class DayOfWeekExtensions
     {
         /// <summary>
-        /// Convert day of week to integer, with Monday as 0.
+        ///     Convert day of week to integer, with Monday as 0.
         /// </summary>
         public static int ToInt(this DayOfWeek value)
         {
-            switch (value)
-            {
+            switch (value) {
                 case DayOfWeek.Sunday:
                     return 6;
 
@@ -38,8 +37,9 @@ namespace QDMS
                 case DayOfWeek.Saturday:
                     return 5;
 
+                default:
+                    return 0;
             }
-            return 0;
         }
     }
 }

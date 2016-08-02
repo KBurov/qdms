@@ -10,42 +10,35 @@ using System.ComponentModel;
 namespace QDMS
 {
     [Serializable]
-    public enum DayOfTheWeek : int
+    public enum DayOfTheWeek
     {
         /// <summary>
-        /// Monday
+        ///     Monday
         /// </summary>
-        [Description("Monday")]
-        Monday = 0,
+        [Description("Monday")] Monday = 0,
         /// <summary>
-        /// Tuesday
+        ///     Tuesday
         /// </summary>
-        [Description("Tuesday")]
-        Tuesday = 1,
+        [Description("Tuesday")] Tuesday = 1,
         /// <summary>
-        /// Wednesday
+        ///     Wednesday
         /// </summary>
-        [Description("Wednesday")]
-        Wednesday = 2,
+        [Description("Wednesday")] Wednesday = 2,
         /// <summary>
-        /// Thursday
+        ///     Thursday
         /// </summary>
-        [Description("Thursday")]
-        Thursday = 3,
+        [Description("Thursday")] Thursday = 3,
         /// <summary>
-        /// Friday
+        ///     Friday
         /// </summary>
-        [Description("Friday")]
-        Friday = 4,
+        [Description("Friday")] Friday = 4,
         /// <summary>
-        /// Saturday
+        ///     Saturday
         /// </summary>
-        [Description("Saturday")]
-        Saturday = 5,
+        [Description("Saturday")] Saturday = 5,
         /// <summary>
-        /// Sunday
+        ///     Sunday
         /// </summary>
-        [Description("Sunday")]
-        Sunday = 6,
+        [Description("Sunday")] Sunday = 6
     }
 }

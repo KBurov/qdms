@@ -13,29 +13,24 @@ namespace QDMS
     public enum ContinuousFuturesRolloverType
     {
         /// <summary>
-        /// Time
+        ///     Time
         /// </summary>
-        [Description("Time")]
-        Time = 0,
+        [Description("Time")] Time = 0,
         /// <summary>
-        /// Volume
+        ///     Volume
         /// </summary>
-        [Description("Volume")]
-        Volume = 1,
+        [Description("Volume")] Volume = 1,
         /// <summary>
-        /// Open Interest
+        ///     Open Interest
         /// </summary>
-        [Description("Open Interest")]
-        OpenInterest = 2,
+        [Description("Open Interest")] OpenInterest = 2,
         /// <summary>
-        /// Volume And Open Interest
+        ///     Volume And Open Interest
         /// </summary>
-        [Description("Volume And Open Interest")]
-        VolumeAndOpenInterest = 3,
+        [Description("Volume And Open Interest")] VolumeAndOpenInterest = 3,
         /// <summary>
-        /// Volume Or Open Interest
+        ///     Volume Or Open Interest
         /// </summary>
-        [Description("Volume Or Open Interest")]
-        VolumeOrOpenInterest = 4,
+        [Description("Volume Or Open Interest")] VolumeOrOpenInterest = 4
     }
 }

@@ -4,7 +4,6 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -13,12 +12,11 @@ namespace QDMS
     public static class OHLCBarExtensions
     {
         /// <summary>
-        /// Save a collection of OHLCBars to a file, in CSV format.
+        ///     Save a collection of OHLCBars to a file, in CSV format.
         /// </summary>
         public static void ToCSVFile(this IEnumerable<OHLCBar> data, string filePath)
         {
-            using (StreamWriter file = new StreamWriter(filePath))
-            {
+            using (var file = new StreamWriter(filePath)) {
                 //write header first
                 var headerFields = new List<string>
                 {
@@ -37,12 +35,13 @@ namespace QDMS
                     "AdjLow",
                     "AdjClose"
                 };
-                string header = String.Join(",", headerFields);
+                var header = string.Join(",", headerFields);
+
                 file.WriteLine(header);
 
-                foreach (OHLCBar bar in data)
-                {
-                    file.WriteLine("{0:yyyy-MM-dd},{1:HH:mm:ss.fff},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13}",
+                foreach (var bar in data) {
+                    file.WriteLine(
+                        "{0:yyyy-MM-dd},{1:HH:mm:ss.fff},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13}",
                         bar.Date,
                         bar.Date,
                         bar.Open,

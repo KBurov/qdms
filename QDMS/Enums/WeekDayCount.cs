@@ -10,32 +10,27 @@ using System.ComponentModel;
 namespace QDMS
 {
     [Serializable]
-    public enum WeekDayCount : int
+    public enum WeekDayCount
     {
         /// <summary>
-        /// 1st
+        ///     1st
         /// </summary>
-        [Description("1st")]
-        First = 0,
+        [Description("1st")] First = 0,
         /// <summary>
-        /// 2nd
+        ///     2nd
         /// </summary>
-        [Description("2nd")]
-        Second = 1,
+        [Description("2nd")] Second = 1,
         /// <summary>
-        /// 3rd
+        ///     3rd
         /// </summary>
-        [Description("3rd")]
-        Third = 2,
+        [Description("3rd")] Third = 2,
         /// <summary>
-        /// 4th
+        ///     4th
         /// </summary>
-        [Description("4th")]
-        Fourth = 3,
+        [Description("4th")] Fourth = 3,
         /// <summary>
-        /// Last
+        ///     Last
         /// </summary>
-        [Description("Last")]
-        Last = 4,
+        [Description("Last")] Last = 4
     }
 }

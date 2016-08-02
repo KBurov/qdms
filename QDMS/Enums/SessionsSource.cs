@@ -10,22 +10,19 @@ using System.ComponentModel;
 namespace QDMS
 {
     [Serializable]
-    public enum SessionsSource : int
+    public enum SessionsSource
     {
         /// <summary>
-        /// Exchange
+        ///     Exchange
         /// </summary>
-        [Description("Exchange")]
-        Exchange = 0,
+        [Description("Exchange")] Exchange = 0,
         /// <summary>
-        /// Template
+        ///     Template
         /// </summary>
-        [Description("Template")]
-        Template = 1,
+        [Description("Template")] Template = 1,
         /// <summary>
-        /// Custom
+        ///     Custom
         /// </summary>
-        [Description("Custom")]
-        Custom = 2,
+        [Description("Custom")] Custom = 2
     }
 }

@@ -6,6 +6,7 @@
 
 using System;
 using System.ComponentModel.DataAnnotations.Schema;
+
 using ProtoBuf;
 
 namespace QDMS
@@ -26,30 +27,10 @@ namespace QDMS
 
         [ProtoMember(3)]
         [NotMapped]
-        public long EarliestDateAsLong
-        {
-            get
-            {
-                return EarliestDate.Ticks;
-            }
-            set
-            {
-                EarliestDate = DateTime.FromBinary(value);
-            }
-        }
+        public long EarliestDateAsLong { get { return EarliestDate.Ticks; } set { EarliestDate = DateTime.FromBinary(value); } }
 
         [ProtoMember(4)]
         [NotMapped]
-        public long LatestDateAsLong
-        {
-            get
-            {
-                return LatestDate.Ticks;
-            }
-            set
-            {
-                LatestDate = DateTime.FromBinary(value);
-            }
-        }
+        public long LatestDateAsLong { get { return LatestDate.Ticks; } set { LatestDate = DateTime.FromBinary(value); } }
     }
 }

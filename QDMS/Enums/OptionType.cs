@@ -13,14 +13,12 @@ namespace QDMS
     public enum OptionType
     {
         /// <summary>
-        /// Call Option
+        ///     Call Option
         /// </summary>
-        [Description("Call")]
-        Call = 0,
+        [Description("Call")] Call = 0,
         /// <summary>
-        /// Put Option
+        ///     Put Option
         /// </summary>
-        [Description("Put")]
-        Put = 1,
+        [Description("Put")] Put = 1
     }
 }
