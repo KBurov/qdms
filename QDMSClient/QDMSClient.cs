@@ -661,23 +661,18 @@ namespace QDMSClient
                 }
                 // 1st message part: what kind of stuff we're receiving
                 var type = _historicalDataSocket.ReceiveFrameString();
-                // TODO: Use if (type.Equals(...)) instead of switch
-                switch (type) {
-                    case "PUSHREP":
-                        HandleDataPushReply();
-                        break;
 
-                    case "HISTREQREP":
-                        HandleHistoricalDataRequestReply();
-                        break;
-
-                    case "AVAILABLEDATAREP":
-                        HandleAvailabledataReply();
-                        break;
-
-                    case "ERROR":
-                        HandleErrorReply();
-                        break;
+                if (type.Equals("PUSHREP", StringComparison.InvariantCultureIgnoreCase)) {
+                    HandleDataPushReply();
+                }
+                else if (type.Equals("HISTREQREP", StringComparison.InvariantCultureIgnoreCase)) {
+                    HandleHistoricalDataRequestReply();
+                }
+                else if (type.Equals("AVAILABLEDATAREP", StringComparison.InvariantCultureIgnoreCase)) {
+                    HandleAvailabledataReply();
+                }
+                else if (type.Equals("ERROR", StringComparison.InvariantCultureIgnoreCase)) {
+                    HandleErrorReply();
                 }
             }
         }
