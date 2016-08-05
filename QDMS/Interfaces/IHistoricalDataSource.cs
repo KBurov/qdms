@@ -12,16 +12,6 @@ namespace QDMS
     public interface IHistoricalDataSource : INotifyPropertyChanged
     {
         /// <summary>
-        ///     Connect to the data source.
-        /// </summary>
-        void Connect();
-
-        /// <summary>
-        ///     Disconnect from the data source.
-        /// </summary>
-        void Disconnect();
-
-        /// <summary>
         ///     Whether the connection to the data source is up or not.
         /// </summary>
         bool Connected { get; }
@@ -31,6 +21,15 @@ namespace QDMS
         /// </summary>
         string Name { get; }
 
+        /// <summary>
+        ///     Connect to the data source.
+        /// </summary>
+        void Connect();
+
+        /// <summary>
+        ///     Disconnect from the data source.
+        /// </summary>
+        void Disconnect();
 
         void RequestHistoricalData(HistoricalDataRequest request);
 
